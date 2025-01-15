@@ -42,6 +42,7 @@ struct State {
     qbounds: array<i32, 8>,
 }
 
+// TODO: NHA I don't know if this will work with the decoding logic, which seems to work on the raw F16 values!
 @group(0) @binding(0) var source_texture: texture_2d<f32>;
 @group(0) @binding(1) var<storage, read_write> block_buffer: array<u32>;
 @group(0) @binding(2) var<uniform> uniforms: Uniforms;

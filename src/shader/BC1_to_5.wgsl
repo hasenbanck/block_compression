@@ -584,8 +584,8 @@ fn compress_bc5(@builtin(global_invocation_id) global_id: vec3<u32>) {
     load_block_g_8bit(&block, xx, yy);
 
     let green_result = compress_block_bc3_alpha(&block);
-    compressed_data[2] = green_result.x;
-    compressed_data[3] = green_result.y;
+    compressed_data[2] = green_result[0];
+    compressed_data[3] = green_result[1];
 
     store_data_4(block_width, xx, yy, compressed_data);
 }

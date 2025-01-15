@@ -11,7 +11,7 @@ use wgpu::{
 
 use crate::{
     settings::{BC6HSettings, Settings},
-    BC7Settings, CompressionVariant,
+    BC7Settings, CompressionVariantLDR,
 };
 
 #[derive(Copy, Clone, Zeroable, Pod)]
@@ -26,7 +26,7 @@ struct Uniforms {
 }
 
 struct Task {
-    variant: CompressionVariant,
+    variant: CompressionVariantLDR,
     width: u32,
     height: u32,
     uniform_offset: u32,
@@ -43,8 +43,8 @@ pub struct BlockCompressor {
     uniforms_buffer: Buffer,
     bc6h_settings_buffer: Buffer,
     bc7_settings_buffer: Buffer,
-    bind_group_layouts: HashMap<CompressionVariant, BindGroupLayout>,
-    pipelines: HashMap<CompressionVariant, ComputePipeline>,
+    bind_group_layouts: HashMap<CompressionVariantLDR, BindGroupLayout>,
+    pipelines: HashMap<CompressionVariantLDR, ComputePipeline>,
     device: Arc<Device>,
     queue: Arc<Queue>,
     uniforms_aligned_size: usize,
@@ -103,49 +103,49 @@ impl BlockCompressor {
             &shader_module_bc1_to_5,
             &mut bind_group_layouts,
             &mut pipelines,
-            CompressionVariant::BC1,
+            CompressionVariantLDR::BC1,
         );
         Self::create_pipeline(
             &device,
             &shader_module_bc1_to_5,
             &mut bind_group_layouts,
             &mut pipelines,
-            CompressionVariant::BC2,
+            CompressionVariantLDR::BC2,
         );
         Self::create_pipeline(
             &device,
             &shader_module_bc1_to_5,
             &mut bind_group_layouts,
             &mut pipelines,
-            CompressionVariant::BC3,
+            CompressionVariantLDR::BC3,
         );
         Self::create_pipeline(
             &device,
             &shader_module_bc1_to_5,
             &mut bind_group_layouts,
             &mut pipelines,
-            CompressionVariant::BC4,
+            CompressionVariantLDR::BC4,
         );
         Self::create_pipeline(
             &device,
             &shader_module_bc1_to_5,
             &mut bind_group_layouts,
             &mut pipelines,
-            CompressionVariant::BC5,
+            CompressionVariantLDR::BC5,
         );
         Self::create_pipeline(
             &device,
             &shader_module_bc6h,
             &mut bind_group_layouts,
             &mut pipelines,
-            CompressionVariant::BC6H,
+            CompressionVariantLDR::BC6H,
         );
         Self::create_pipeline(
             &device,
             &shader_module_bc7,
             &mut bind_group_layouts,
             &mut pipelines,
-            CompressionVariant::BC7,
+            CompressionVariantLDR::BC7,
         );
 
         Self {
@@ -167,9 +167,9 @@ impl BlockCompressor {
     fn create_pipeline(
         device: &Device,
         shader_module: &ShaderModule,
-        bind_group_layouts: &mut HashMap<CompressionVariant, BindGroupLayout>,
-        pipelines: &mut HashMap<CompressionVariant, ComputePipeline>,
-        variant: CompressionVariant,
+        bind_group_layouts: &mut HashMap<CompressionVariantLDR, BindGroupLayout>,
+        pipelines: &mut HashMap<CompressionVariantLDR, ComputePipeline>,
+        variant: CompressionVariantLDR,
     ) {
         let mut layout_entries = vec![
             BindGroupLayoutEntry {
@@ -205,7 +205,7 @@ impl BlockCompressor {
         ];
 
         match variant {
-            CompressionVariant::BC6H => {
+            CompressionVariantLDR::BC6H => {
                 layout_entries.push(BindGroupLayoutEntry {
                     binding: 3,
                     visibility: ShaderStages::COMPUTE,
@@ -217,7 +217,7 @@ impl BlockCompressor {
                     count: None,
                 });
             }
-            CompressionVariant::BC7 => {
+            CompressionVariantLDR::BC7 => {
                 layout_entries.push(BindGroupLayoutEntry {
                     binding: 3,
                     visibility: ShaderStages::COMPUTE,
@@ -258,7 +258,7 @@ impl BlockCompressor {
         pipelines.insert(variant, pipeline);
     }
 
-    /// Adds a texture compression task to the queue.
+    /// Adds an 8-bit LDR texture compression task to the queue.
     ///
     /// This API is designed to be very flexible. For example, it is possible to fill the mip map
     /// levels of a texture with multiple calls to this function.
@@ -274,7 +274,7 @@ impl BlockCompressor {
     /// # Buffer Requirements
     /// The destination buffer must have sufficient capacity to store the compressed blocks at the
     /// specified offset. The required size can be calculated using
-    /// [`CompressionVariant::blocks_byte_size()`].
+    /// [`CompressionVariantLDR::blocks_byte_size()`].
     ///
     /// For example:
     ///
@@ -292,17 +292,17 @@ impl BlockCompressor {
     /// * `buffer` - Destination storage buffer for the compressed data
     /// * `offset` - Optional offset in bytes into the destination buffer
     /// * `settings` - Optional compression settings for BC6H/BC7.
-    ///                If none provided, defaults to the slowest preset.
+    ///                If none provided, defaults to the slowest preset
     ///
     /// # Panics
-    /// - If width or height is not a multiple of 4
-    /// - If the destination buffer is not a storage buffer
-    /// - If the destination buffer is too small to hold the compressed blocks at the specified offset
-    /// - If the wrong settings where used for a variant with settings
+    /// - If `width` or `height` is not a multiple of 4
+    /// - If the destination `buffer` is not a storage buffer
+    /// - If the destination `buffer` is too small to hold the compressed blocks at the specified offset
+    /// - If the wrong `settings` where used for a variant with settings
     #[allow(clippy::too_many_arguments)]
-    pub fn add_compression_task(
+    pub fn add_compression_task_ldr(
         &mut self,
-        variant: CompressionVariant,
+        variant: CompressionVariantLDR,
         texture_view: &TextureView,
         width: u32,
         height: u32,
@@ -312,7 +312,7 @@ impl BlockCompressor {
     ) {
         let mut settings = settings.into();
 
-        if variant == CompressionVariant::BC6H {
+        if variant == CompressionVariantLDR::BC6H {
             match &settings {
                 None => settings = Some(Settings::BC6H(BC6HSettings::very_slow())),
                 Some(Settings::BC6H(..)) => { /* Nothing to do */ }
@@ -322,7 +322,7 @@ impl BlockCompressor {
             }
         }
 
-        if variant == CompressionVariant::BC7 {
+        if variant == CompressionVariantLDR::BC7 {
             match &settings {
                 None => settings = Some(Settings::BC7(BC7Settings::alpha_slow())),
                 Some(Settings::BC6H(..)) => {
@@ -346,7 +346,7 @@ impl BlockCompressor {
     #[allow(clippy::too_many_arguments)]
     fn add_task(
         &mut self,
-        variant: CompressionVariant,
+        variant: CompressionVariantLDR,
         texture_view: &TextureView,
         width: u32,
         height: u32,
@@ -378,11 +378,11 @@ impl BlockCompressor {
             .expect("Can't find bind group layout for variant");
 
         let bind_group = match variant {
-            CompressionVariant::BC1
-            | CompressionVariant::BC2
-            | CompressionVariant::BC3
-            | CompressionVariant::BC4
-            | CompressionVariant::BC5 => self.device.create_bind_group(&BindGroupDescriptor {
+            CompressionVariantLDR::BC1
+            | CompressionVariantLDR::BC2
+            | CompressionVariantLDR::BC3
+            | CompressionVariantLDR::BC4
+            | CompressionVariantLDR::BC5 => self.device.create_bind_group(&BindGroupDescriptor {
                 label: Some("bind group"),
                 layout: bind_group_layout,
                 entries: &[
@@ -404,7 +404,7 @@ impl BlockCompressor {
                     },
                 ],
             }),
-            CompressionVariant::BC6H => self.device.create_bind_group(&BindGroupDescriptor {
+            CompressionVariantLDR::BC6H => self.device.create_bind_group(&BindGroupDescriptor {
                 label: Some("bind group"),
                 layout: bind_group_layout,
                 entries: &[
@@ -434,7 +434,7 @@ impl BlockCompressor {
                     },
                 ],
             }),
-            CompressionVariant::BC7 => self.device.create_bind_group(&BindGroupDescriptor {
+            CompressionVariantLDR::BC7 => self.device.create_bind_group(&BindGroupDescriptor {
                 label: Some("bind group"),
                 layout: bind_group_layout,
                 entries: &[
@@ -492,7 +492,7 @@ impl BlockCompressor {
         let bc6_setting_count = self
             .task
             .iter()
-            .filter(|task| task.variant == CompressionVariant::BC6H)
+            .filter(|task| task.variant == CompressionVariantLDR::BC6H)
             .count();
 
         let total_bc6h_size = self.bc6h_aligned_size * bc6_setting_count;
@@ -508,7 +508,7 @@ impl BlockCompressor {
         let bc7_setting_count = self
             .task
             .iter()
-            .filter(|task| task.variant == CompressionVariant::BC7)
+            .filter(|task| task.variant == CompressionVariantLDR::BC7)
             .count();
 
         let total_bc7_size = self.bc7_aligned_size * bc7_setting_count;
@@ -553,7 +553,7 @@ impl BlockCompressor {
         for (index, task) in self
             .task
             .iter_mut()
-            .filter(|task| task.variant == CompressionVariant::BC6H)
+            .filter(|task| task.variant == CompressionVariantLDR::BC6H)
             .enumerate()
         {
             let offset = index * self.bc6h_aligned_size;
@@ -583,7 +583,7 @@ impl BlockCompressor {
         for (index, task) in self
             .task
             .iter_mut()
-            .filter(|task| task.variant == CompressionVariant::BC7)
+            .filter(|task| task.variant == CompressionVariantLDR::BC7)
             .enumerate()
         {
             let offset = index * self.bc7_aligned_size;
@@ -627,7 +627,7 @@ impl BlockCompressor {
             pass.set_pipeline(pipeline);
 
             match task.variant {
-                CompressionVariant::BC6H | CompressionVariant::BC7 => {
+                CompressionVariantLDR::BC6H | CompressionVariantLDR::BC7 => {
                     pass.set_bind_group(
                         0,
                         &task.bind_group,

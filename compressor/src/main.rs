@@ -1,6 +1,6 @@
 use std::{fs::File, path::PathBuf, sync::Arc, time::Instant};
 
-use block_compression::{BC6HSettings, BC7Settings, BlockCompressor, CompressionVariant};
+use block_compression::{BC6HSettings, BC7Settings, BlockCompressor, CompressionVariantLDR};
 use bytemuck::cast_slice;
 use ddsfile::{AlphaMode, D3D10ResourceDimension, Dds, DxgiFormat, NewDxgiParams};
 use image::{EncodableLayout, ImageReader};
@@ -47,8 +47,8 @@ fn main() {
     });
 
     match variant {
-        CompressionVariant::BC6H => {
-            compressor.add_compression_task(
+        CompressionVariantLDR::BC6H => {
+            compressor.add_compression_task_ldr(
                 variant,
                 &texture_view,
                 width,
@@ -58,8 +58,8 @@ fn main() {
                 BC6HSettings::slow(),
             );
         }
-        CompressionVariant::BC7 => {
-            compressor.add_compression_task(
+        CompressionVariantLDR::BC7 => {
+            compressor.add_compression_task_ldr(
                 variant,
                 &texture_view,
                 width,
@@ -70,7 +70,7 @@ fn main() {
             );
         }
         _ => {
-            compressor.add_compression_task(
+            compressor.add_compression_task_ldr(
                 variant,
                 &texture_view,
                 width,
@@ -293,7 +293,7 @@ fn download_blocks_data(device: &Device, queue: &Queue, block_buffer: Buffer) ->
 
 fn write_dds_file(
     file_name: &str,
-    variant: CompressionVariant,
+    variant: CompressionVariantLDR,
     width: u32,
     height: u32,
     block_data: Vec<u8>,
@@ -321,15 +321,15 @@ fn write_dds_file(
     dds.write(&mut file).expect("failed to write DDS file");
 }
 
-fn dxgi_format(variant: CompressionVariant) -> DxgiFormat {
+fn dxgi_format(variant: CompressionVariantLDR) -> DxgiFormat {
     match variant {
-        CompressionVariant::BC1 => DxgiFormat::BC1_UNorm_sRGB,
-        CompressionVariant::BC2 => DxgiFormat::BC2_UNorm_sRGB,
-        CompressionVariant::BC3 => DxgiFormat::BC3_UNorm_sRGB,
-        CompressionVariant::BC4 => DxgiFormat::BC4_UNorm,
-        CompressionVariant::BC5 => DxgiFormat::BC5_UNorm,
-        CompressionVariant::BC6H => DxgiFormat::BC6H_UF16,
-        CompressionVariant::BC7 => DxgiFormat::BC7_UNorm_sRGB,
+        CompressionVariantLDR::BC1 => DxgiFormat::BC1_UNorm_sRGB,
+        CompressionVariantLDR::BC2 => DxgiFormat::BC2_UNorm_sRGB,
+        CompressionVariantLDR::BC3 => DxgiFormat::BC3_UNorm_sRGB,
+        CompressionVariantLDR::BC4 => DxgiFormat::BC4_UNorm,
+        CompressionVariantLDR::BC5 => DxgiFormat::BC5_UNorm,
+        CompressionVariantLDR::BC6H => DxgiFormat::BC6H_UF16,
+        CompressionVariantLDR::BC7 => DxgiFormat::BC7_UNorm_sRGB,
     }
 }
 
@@ -345,7 +345,7 @@ fn print_help() {
     println!("  bc7  - BC7 compression with smooth alpha (RGBA)");
 }
 
-fn parse_args() -> Option<(CompressionVariant, String)> {
+fn parse_args() -> Option<(CompressionVariantLDR, String)> {
     let args: Vec<String> = std::env::args().collect();
 
     if args.len() != 3 || args.contains(&"--help".to_string()) {
@@ -354,13 +354,13 @@ fn parse_args() -> Option<(CompressionVariant, String)> {
     }
 
     let variant = match args[1].to_lowercase().as_str() {
-        "bc1" => CompressionVariant::BC1,
-        "bc2" => CompressionVariant::BC2,
-        "bc3" => CompressionVariant::BC3,
-        "bc4" => CompressionVariant::BC4,
-        "bc5" => CompressionVariant::BC5,
-        "bc6h" => CompressionVariant::BC6H,
-        "bc7" => CompressionVariant::BC7,
+        "bc1" => CompressionVariantLDR::BC1,
+        "bc2" => CompressionVariantLDR::BC2,
+        "bc3" => CompressionVariantLDR::BC3,
+        "bc4" => CompressionVariantLDR::BC4,
+        "bc5" => CompressionVariantLDR::BC5,
+        "bc6h" => CompressionVariantLDR::BC6H,
+        "bc7" => CompressionVariantLDR::BC7,
         _ => {
             println!("Error: Invalid compression variant");
             print_help();

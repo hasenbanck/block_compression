@@ -20,7 +20,7 @@ impl From<BC7Settings> for Option<Settings> {
 }
 
 /// Encoding settings for BC6H.
-#[derive(Copy, Clone, Debug, Default, Pod, Zeroable)]
+#[derive(Copy, Clone, Debug, Eq, PartialEq, Pod, Zeroable)]
 #[repr(C)]
 pub struct BC6HSettings {
     slow_mode: u32,

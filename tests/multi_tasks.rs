@@ -11,7 +11,7 @@ use crate::common::{
 
 mod common;
 
-fn test_multi_task_compression(variant: CompressionVariant, settings: Option<Settings>) {
+fn test_multi_task_compression(variant: CompressionVariantLDR, settings: Option<Settings>) {
     let (device, queue) = create_wgpu_resources();
     let mut block_compressor = BlockCompressor::new(device.clone(), queue.clone());
 
@@ -24,7 +24,7 @@ fn test_multi_task_compression(variant: CompressionVariant, settings: Option<Set
 
     let blocks = create_blocks_buffer(&device, total_size as u64);
 
-    block_compressor.add_compression_task(
+    block_compressor.add_compression_task_ldr(
         variant,
         &brick_texture.create_view(&TextureViewDescriptor {
             format: Some(Rgba8Unorm),
@@ -36,7 +36,7 @@ fn test_multi_task_compression(variant: CompressionVariant, settings: Option<Set
         None,
         settings,
     );
-    block_compressor.add_compression_task(
+    block_compressor.add_compression_task_ldr(
         variant,
         &marble_texture.create_view(&TextureViewDescriptor {
             format: Some(Rgba8Unorm),
@@ -75,33 +75,33 @@ fn test_multi_task_compression(variant: CompressionVariant, settings: Option<Set
 
 #[test]
 fn multi_task_compression_bc1() {
-    test_multi_task_compression(CompressionVariant::BC1, None);
+    test_multi_task_compression(CompressionVariantLDR::BC1, None);
 }
 
 #[test]
 fn multi_task_compression_bc2() {
-    test_multi_task_compression(CompressionVariant::BC2, None);
+    test_multi_task_compression(CompressionVariantLDR::BC2, None);
 }
 
 #[test]
 fn multi_task_compression_bc3() {
-    test_multi_task_compression(CompressionVariant::BC3, None);
+    test_multi_task_compression(CompressionVariantLDR::BC3, None);
 }
 
 #[test]
 fn multi_task_compression_bc4() {
-    test_multi_task_compression(CompressionVariant::BC4, None);
+    test_multi_task_compression(CompressionVariantLDR::BC4, None);
 }
 
 #[test]
 fn multi_task_compression_bc5() {
-    test_multi_task_compression(CompressionVariant::BC5, None);
+    test_multi_task_compression(CompressionVariantLDR::BC5, None);
 }
 
 #[test]
 fn multi_task_compression_bc7() {
     test_multi_task_compression(
-        CompressionVariant::BC7,
+        CompressionVariantLDR::BC7,
         Some(Settings::BC7(BC7Settings::opaque_ultra_fast())),
     );
 }

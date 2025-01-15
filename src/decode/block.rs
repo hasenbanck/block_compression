@@ -249,6 +249,545 @@ fn decode_smooth_alpha_block<const PIXEL_SIZE: usize>(
     }
 }
 
+/// Decodes a BC7 block by reading 16 bytes from `compressed_block` and writing the RGB16F data (half float) into `decompressed_block` with `destination_pitch` many bytes per output row.
+#[cfg(feature = "half")]
+pub fn decode_block_bc6h(
+    compressed_block: &[u8],
+    decompressed_block: &mut [half::f16],
+    destination_pitch: usize,
+    is_signed: bool,
+) {
+    use half::f16;
+
+    static ACTUAL_BITS_COUNT: &[[u8; 14]; 4] = &[
+        [10, 7, 11, 11, 11, 9, 8, 8, 8, 6, 10, 11, 12, 16], // W
+        [5, 6, 5, 4, 4, 5, 6, 5, 5, 6, 10, 9, 8, 4],        // dR
+        [5, 6, 4, 5, 4, 5, 5, 6, 5, 6, 10, 9, 8, 4],        // dG
+        [5, 6, 4, 4, 5, 5, 5, 5, 6, 6, 10, 9, 8, 4],        // dB
+    ];
+
+    // There are 32 possible partition sets for a two-region tile.
+    // Each 4x4 block represents a single shape.
+    //Here also every fix-up index has MSB bit set.
+    static PARTITION_SETS: &[[[u8; 4]; 4]; 32] = &[
+        [[128, 0, 1, 1], [0, 0, 1, 1], [0, 0, 1, 1], [0, 0, 1, 129]], //  0
+        [[128, 0, 0, 1], [0, 0, 0, 1], [0, 0, 0, 1], [0, 0, 0, 129]], //  1
+        [[128, 1, 1, 1], [0, 1, 1, 1], [0, 1, 1, 1], [0, 1, 1, 129]], //  2
+        [[128, 0, 0, 1], [0, 0, 1, 1], [0, 0, 1, 1], [0, 1, 1, 129]], //  3
+        [[128, 0, 0, 0], [0, 0, 0, 1], [0, 0, 0, 1], [0, 0, 1, 129]], //  4
+        [[128, 0, 1, 1], [0, 1, 1, 1], [0, 1, 1, 1], [1, 1, 1, 129]], //  5
+        [[128, 0, 0, 1], [0, 0, 1, 1], [0, 1, 1, 1], [1, 1, 1, 129]], //  6
+        [[128, 0, 0, 0], [0, 0, 0, 1], [0, 0, 1, 1], [0, 1, 1, 129]], //  7
+        [[128, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 1], [0, 0, 1, 129]], //  8
+        [[128, 0, 1, 1], [0, 1, 1, 1], [1, 1, 1, 1], [1, 1, 1, 129]], //  9
+        [[128, 0, 0, 0], [0, 0, 0, 1], [0, 1, 1, 1], [1, 1, 1, 129]], // 10
+        [[128, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 1], [0, 1, 1, 129]], // 11
+        [[128, 0, 0, 1], [0, 1, 1, 1], [1, 1, 1, 1], [1, 1, 1, 129]], // 12
+        [[128, 0, 0, 0], [0, 0, 0, 0], [1, 1, 1, 1], [1, 1, 1, 129]], // 13
+        [[128, 0, 0, 0], [1, 1, 1, 1], [1, 1, 1, 1], [1, 1, 1, 129]], // 14
+        [[128, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [1, 1, 1, 129]], // 15
+        [[128, 0, 0, 0], [1, 0, 0, 0], [1, 1, 1, 0], [1, 1, 1, 129]], // 16
+        [[128, 1, 129, 1], [0, 0, 0, 1], [0, 0, 0, 0], [0, 0, 0, 0]], // 17
+        [[128, 0, 0, 0], [0, 0, 0, 0], [129, 0, 0, 0], [1, 1, 1, 0]], // 18
+        [[128, 1, 129, 1], [0, 0, 1, 1], [0, 0, 0, 1], [0, 0, 0, 0]], // 19
+        [[128, 0, 129, 1], [0, 0, 0, 1], [0, 0, 0, 0], [0, 0, 0, 0]], // 20
+        [[128, 0, 0, 0], [1, 0, 0, 0], [129, 1, 0, 0], [1, 1, 1, 0]], // 21
+        [[128, 0, 0, 0], [0, 0, 0, 0], [129, 0, 0, 0], [1, 1, 0, 0]], // 22
+        [[128, 1, 1, 1], [0, 0, 1, 1], [0, 0, 1, 1], [0, 0, 0, 129]], // 23
+        [[128, 0, 129, 1], [0, 0, 0, 1], [0, 0, 0, 1], [0, 0, 0, 0]], // 24
+        [[128, 0, 0, 0], [1, 0, 0, 0], [129, 0, 0, 0], [1, 1, 0, 0]], // 25
+        [[128, 1, 129, 0], [0, 1, 1, 0], [0, 1, 1, 0], [0, 1, 1, 0]], // 26
+        [[128, 0, 129, 1], [0, 1, 1, 0], [0, 1, 1, 0], [1, 1, 0, 0]], // 27
+        [[128, 0, 0, 1], [0, 1, 1, 1], [129, 1, 1, 0], [1, 0, 0, 0]], // 28
+        [[128, 0, 0, 0], [1, 1, 1, 1], [129, 1, 1, 1], [0, 0, 0, 0]], // 29
+        [[128, 1, 129, 1], [0, 0, 0, 1], [1, 0, 0, 0], [1, 1, 1, 0]], // 30
+        [[128, 0, 129, 1], [1, 0, 0, 1], [1, 0, 0, 1], [1, 1, 0, 0]], // 31
+    ];
+
+    const WEIGHT3: &[i32] = &[0, 9, 18, 27, 37, 46, 55, 64];
+    const WEIGHT4: &[i32] = &[0, 4, 9, 13, 17, 21, 26, 30, 34, 38, 43, 47, 51, 55, 60, 64];
+
+    let mut bstream = BitStream::new(compressed_block);
+
+    let mut r = [0i32; 4];
+    let mut g = [0i32; 4];
+    let mut b = [0i32; 4];
+
+    let mut mode = bstream.read_bits(2);
+    if mode > 1 {
+        mode |= bstream.read_bits(3) << 2;
+    }
+
+    // modes >= 11 (10 in my code) are using 0 one, others will read it from the bitstream
+    let mut partition = 0;
+
+    match mode {
+        // mode 1
+        0b00 => {
+            // Partition indices: 46 bits
+            // Partition: 5 bits
+            // Color Endpoints: 75 bits (10.555, 10.555, 10.555)
+            g[2] |= bstream.read_bit_i32() << 4; // gy[4]
+            b[2] |= bstream.read_bit_i32() << 4; // by[4]
+            b[3] |= bstream.read_bit_i32() << 4; // bz[4]
+            r[0] |= bstream.read_bits_i32(10); // rw[9:0]
+            g[0] |= bstream.read_bits_i32(10); // gw[9:0]
+            b[0] |= bstream.read_bits_i32(10); // bw[9:0]
+            r[1] |= bstream.read_bits_i32(5); // rx[4:0]
+            g[3] |= bstream.read_bit_i32() << 4; // gz[4]
+            g[2] |= bstream.read_bits_i32(4); // gy[3:0]
+            g[1] |= bstream.read_bits_i32(5); // gx[4:0]
+            b[3] |= bstream.read_bit_i32(); // bz[0]
+            g[3] |= bstream.read_bits_i32(4); // gz[3:0]
+            b[1] |= bstream.read_bits_i32(5); // bx[4:0]
+            b[3] |= bstream.read_bit_i32() << 1; // bz[1]
+            b[2] |= bstream.read_bits_i32(4); // by[3:0]
+            r[2] |= bstream.read_bits_i32(5); // ry[4:0]
+            b[3] |= bstream.read_bit_i32() << 2; // bz[2]
+            r[3] |= bstream.read_bits_i32(5); // rz[4:0]
+            b[3] |= bstream.read_bit_i32() << 3; // bz[3]
+            partition = bstream.read_bits_i32(5); // d[4:0]
+            mode = 0;
+        }
+
+        // mode 2
+        0b01 => {
+            // Partition indices: 46 bits
+            // Partition: 5 bits
+            // Color Endpoints: 75 bits (7666, 7666, 7666)
+            g[2] |= bstream.read_bit_i32() << 5; // gy[5]
+            g[3] |= bstream.read_bit_i32() << 4; // gz[4]
+            g[3] |= bstream.read_bit_i32() << 5; // gz[5]
+            r[0] |= bstream.read_bits_i32(7); // rw[6:0]
+            b[3] |= bstream.read_bit_i32(); // bz[0]
+            b[3] |= bstream.read_bit_i32() << 1; // bz[1]
+            b[2] |= bstream.read_bit_i32() << 4; // by[4]
+            g[0] |= bstream.read_bits_i32(7); // gw[6:0]
+            b[2] |= bstream.read_bit_i32() << 5; // by[5]
+            b[3] |= bstream.read_bit_i32() << 2; // bz[2]
+            g[2] |= bstream.read_bit_i32() << 4; // gy[4]
+            b[0] |= bstream.read_bits_i32(7); // bw[6:0]
+            b[3] |= bstream.read_bit_i32() << 3; // bz[3]
+            b[3] |= bstream.read_bit_i32() << 5; // bz[5]
+            b[3] |= bstream.read_bit_i32() << 4; // bz[4]
+            r[1] |= bstream.read_bits_i32(6); // rx[5:0]
+            g[2] |= bstream.read_bits_i32(4); // gy[3:0]
+            g[1] |= bstream.read_bits_i32(6); // gx[5:0]
+            g[3] |= bstream.read_bits_i32(4); // gz[3:0]
+            b[1] |= bstream.read_bits_i32(6); // bx[5:0]
+            b[2] |= bstream.read_bits_i32(4); // by[3:0]
+            r[2] |= bstream.read_bits_i32(6); // ry[5:0]
+            r[3] |= bstream.read_bits_i32(6); // rz[5:0]
+            partition = bstream.read_bits_i32(5); // d[4:0]
+            mode = 1;
+        }
+
+        // mode 3
+        0b00010 => {
+            // Partition indices: 46 bits
+            // Partition: 5 bits
+            // Color Endpoints: 72 bits (11.555, 11.444, 11.444)
+            r[0] |= bstream.read_bits_i32(10); // rw[9:0]
+            g[0] |= bstream.read_bits_i32(10); // gw[9:0]
+            b[0] |= bstream.read_bits_i32(10); // bw[9:0]
+            r[1] |= bstream.read_bits_i32(5); // rx[4:0]
+            r[0] |= bstream.read_bit_i32() << 10; // rw[10]
+            g[2] |= bstream.read_bits_i32(4); // gy[3:0]
+            g[1] |= bstream.read_bits_i32(4); // gx[3:0]
+            g[0] |= bstream.read_bit_i32() << 10; // gw[10]
+            b[3] |= bstream.read_bit_i32(); // bz[0]
+            g[3] |= bstream.read_bits_i32(4); // gz[3:0]
+            b[1] |= bstream.read_bits_i32(4); // bx[3:0]
+            b[0] |= bstream.read_bit_i32() << 10; // bw[10]
+            b[3] |= bstream.read_bit_i32() << 1; // bz[1]
+            b[2] |= bstream.read_bits_i32(4); // by[3:0]
+            r[2] |= bstream.read_bits_i32(5); // ry[4:0]
+            b[3] |= bstream.read_bit_i32() << 2; // bz[2]
+            r[3] |= bstream.read_bits_i32(5); // rz[4:0]
+            b[3] |= bstream.read_bit_i32() << 3; // bz[3]
+            partition = bstream.read_bits_i32(5); // d[4:0]
+            mode = 2;
+        }
+        // mode 4
+        0b00110 => {
+            // Partition indices: 46 bits
+            // Partition: 5 bits
+            // Color Endpoints: 72 bits (11.444, 11.555, 11.444)
+            r[0] |= bstream.read_bits_i32(10); // rw[9:0]
+            g[0] |= bstream.read_bits_i32(10); // gw[9:0]
+            b[0] |= bstream.read_bits_i32(10); // bw[9:0]
+            r[1] |= bstream.read_bits_i32(4); // rx[3:0]
+            r[0] |= bstream.read_bit_i32() << 10; // rw[10]
+            g[3] |= bstream.read_bit_i32() << 4; // gz[4]
+            g[2] |= bstream.read_bits_i32(4); // gy[3:0]
+            g[1] |= bstream.read_bits_i32(5); // gx[4:0]
+            g[0] |= bstream.read_bit_i32() << 10; // gw[10]
+            g[3] |= bstream.read_bits_i32(4); // gz[3:0]
+            b[1] |= bstream.read_bits_i32(4); // bx[3:0]
+            b[0] |= bstream.read_bit_i32() << 10; // bw[10]
+            b[3] |= bstream.read_bit_i32() << 1; // bz[1]
+            b[2] |= bstream.read_bits_i32(4); // by[3:0]
+            r[2] |= bstream.read_bits_i32(4); // ry[3:0]
+            b[3] |= bstream.read_bit_i32(); // bz[0]
+            b[3] |= bstream.read_bit_i32() << 2; // bz[2]
+            r[3] |= bstream.read_bits_i32(4); // rz[3:0]
+            g[2] |= bstream.read_bit_i32() << 4; // gy[4]
+            b[3] |= bstream.read_bit_i32() << 3; // bz[3]
+            partition = bstream.read_bits_i32(5); // d[4:0]
+            mode = 3;
+        }
+        // mode 5
+        0b01010 => {
+            // Partition indices: 46 bits
+            // Partition: 5 bits
+            // Color Endpoints: 72 bits (11.444, 11.444, 11.555)
+            r[0] |= bstream.read_bits_i32(10); // rw[9:0]
+            g[0] |= bstream.read_bits_i32(10); // gw[9:0]
+            b[0] |= bstream.read_bits_i32(10); // bw[9:0]
+            r[1] |= bstream.read_bits_i32(4); // rx[3:0]
+            r[0] |= bstream.read_bit_i32() << 10; // rw[10]
+            b[2] |= bstream.read_bit_i32() << 4; // by[4]
+            g[2] |= bstream.read_bits_i32(4); // gy[3:0]
+            g[1] |= bstream.read_bits_i32(4); // gx[3:0]
+            g[0] |= bstream.read_bit_i32() << 10; // gw[10]
+            b[3] |= bstream.read_bit_i32(); // bz[0]
+            g[3] |= bstream.read_bits_i32(4); // gz[3:0]
+            b[1] |= bstream.read_bits_i32(5); // bx[4:0]
+            b[0] |= bstream.read_bit_i32() << 10; // bw[10]
+            b[2] |= bstream.read_bits_i32(4); // by[3:0]
+            r[2] |= bstream.read_bits_i32(4); // ry[3:0]
+            b[3] |= bstream.read_bit_i32() << 1; // bz[1]
+            b[3] |= bstream.read_bit_i32() << 2; // bz[2]
+            r[3] |= bstream.read_bits_i32(4); // rz[3:0]
+            b[3] |= bstream.read_bit_i32() << 4; // bz[4]
+            b[3] |= bstream.read_bit_i32() << 3; // bz[3]
+            partition = bstream.read_bits_i32(5); // d[4:0]
+            mode = 4;
+        }
+        // mode 6
+        0b01110 => {
+            // Partition indices: 46 bits
+            // Partition: 5 bits
+            // Color Endpoints: 72 bits (9555, 9555, 9555)
+            r[0] |= bstream.read_bits_i32(9); // rw[8:0]
+            b[2] |= bstream.read_bit_i32() << 4; // by[4]
+            g[0] |= bstream.read_bits_i32(9); // gw[8:0]
+            g[2] |= bstream.read_bit_i32() << 4; // gy[4]
+            b[0] |= bstream.read_bits_i32(9); // bw[8:0]
+            b[3] |= bstream.read_bit_i32() << 4; // bz[4]
+            r[1] |= bstream.read_bits_i32(5); // rx[4:0]
+            g[3] |= bstream.read_bit_i32() << 4; // gz[4]
+            g[2] |= bstream.read_bits_i32(4); // gy[3:0]
+            g[1] |= bstream.read_bits_i32(5); // gx[4:0]
+            b[3] |= bstream.read_bit_i32(); // bz[0]
+            g[3] |= bstream.read_bits_i32(4); // gx[3:0]
+            b[1] |= bstream.read_bits_i32(5); // bx[4:0]
+            b[3] |= bstream.read_bit_i32() << 1; // bz[1]
+            b[2] |= bstream.read_bits_i32(4); // by[3:0]
+            r[2] |= bstream.read_bits_i32(5); // ry[4:0]
+            b[3] |= bstream.read_bit_i32() << 2; // bz[2]
+            r[3] |= bstream.read_bits_i32(5); // rz[4:0]
+            b[3] |= bstream.read_bit_i32() << 3; // bz[3]
+            partition = bstream.read_bits_i32(5); // d[4:0]
+            mode = 5;
+        }
+        // mode 7
+        0b10010 => {
+            // Partition indices: 46 bits
+            // Partition: 5 bits
+            // Color Endpoints: 72 bits (8666, 8555, 8555)
+            r[0] |= bstream.read_bits_i32(8); // rw[7:0]
+            g[3] |= bstream.read_bit_i32() << 4; // gz[4]
+            b[2] |= bstream.read_bit_i32() << 4; // by[4]
+            g[0] |= bstream.read_bits_i32(8); // gw[7:0]
+            b[3] |= bstream.read_bit_i32() << 2; // bz[2]
+            g[2] |= bstream.read_bit_i32() << 4; // gy[4]
+            b[0] |= bstream.read_bits_i32(8); // bw[7:0]
+            b[3] |= bstream.read_bit_i32() << 3; // bz[3]
+            b[3] |= bstream.read_bit_i32() << 4; // bz[4]
+            r[1] |= bstream.read_bits_i32(6); // rx[5:0]
+            g[2] |= bstream.read_bits_i32(4); // gy[3:0]
+            g[1] |= bstream.read_bits_i32(5); // gx[4:0]
+            b[3] |= bstream.read_bit_i32(); // bz[0]
+            g[3] |= bstream.read_bits_i32(4); // gz[3:0]
+            b[1] |= bstream.read_bits_i32(5); // bx[4:0]
+            b[3] |= bstream.read_bit_i32() << 1; // bz[1]
+            b[2] |= bstream.read_bits_i32(4); // by[3:0]
+            r[2] |= bstream.read_bits_i32(6); // ry[5:0]
+            r[3] |= bstream.read_bits_i32(6); // rz[5:0]
+            partition = bstream.read_bits_i32(5); // d[4:0]
+            mode = 6;
+        }
+        // mode 8
+        0b10110 => {
+            // Partition indices: 46 bits
+            // Partition: 5 bits
+            // Color Endpoints: 72 bits (8555, 8666, 8555)
+            r[0] |= bstream.read_bits_i32(8); // rw[7:0]
+            b[3] |= bstream.read_bit_i32(); // bz[0]
+            b[2] |= bstream.read_bit_i32() << 4; // by[4]
+            g[0] |= bstream.read_bits_i32(8); // gw[7:0]
+            g[2] |= bstream.read_bit_i32() << 5; // gy[5]
+            g[2] |= bstream.read_bit_i32() << 4; // gy[4]
+            b[0] |= bstream.read_bits_i32(8); // bw[7:0]
+            g[3] |= bstream.read_bit_i32() << 5; // gz[5]
+            b[3] |= bstream.read_bit_i32() << 4; // bz[4]
+            r[1] |= bstream.read_bits_i32(5); // rx[4:0]
+            g[3] |= bstream.read_bit_i32() << 4; // gz[4]
+            g[2] |= bstream.read_bits_i32(4); // gy[3:0]
+            g[1] |= bstream.read_bits_i32(6); // gx[5:0]
+            g[3] |= bstream.read_bits_i32(4); // zx[3:0]
+            b[1] |= bstream.read_bits_i32(5); // bx[4:0]
+            b[3] |= bstream.read_bit_i32() << 1; // bz[1]
+            b[2] |= bstream.read_bits_i32(4); // by[3:0]
+            r[2] |= bstream.read_bits_i32(5); // ry[4:0]
+            b[3] |= bstream.read_bit_i32() << 2; // bz[2]
+            r[3] |= bstream.read_bits_i32(5); // rz[4:0]
+            b[3] |= bstream.read_bit_i32() << 3; // bz[3]
+            partition = bstream.read_bits_i32(5); // d[4:0]
+            mode = 7;
+        }
+        // mode 9
+        0b11010 => {
+            // Partition indices: 46 bits
+            // Partition: 5 bits
+            // Color Endpoints: 72 bits (8555, 8555, 8666)
+            r[0] |= bstream.read_bits_i32(8); // rw[7:0]
+            b[3] |= bstream.read_bit_i32() << 1; // bz[1]
+            b[2] |= bstream.read_bit_i32() << 4; // by[4]
+            g[0] |= bstream.read_bits_i32(8); // gw[7:0]
+            b[2] |= bstream.read_bit_i32() << 5; // by[5]
+            g[2] |= bstream.read_bit_i32() << 4; // gy[4]
+            b[0] |= bstream.read_bits_i32(8); // bw[7:0]
+            b[3] |= bstream.read_bit_i32() << 5; // bz[5]
+            b[3] |= bstream.read_bit_i32() << 4; // bz[4]
+            r[1] |= bstream.read_bits_i32(5); // bw[4:0]
+            g[3] |= bstream.read_bit_i32() << 4; // gz[4]
+            g[2] |= bstream.read_bits_i32(4); // gy[3:0]
+            g[1] |= bstream.read_bits_i32(5); // gx[4:0]
+            b[3] |= bstream.read_bit_i32(); // bz[0]
+            g[3] |= bstream.read_bits_i32(4); // gz[3:0]
+            b[1] |= bstream.read_bits_i32(6); // bx[5:0]
+            b[2] |= bstream.read_bits_i32(4); // by[3:0]
+            r[2] |= bstream.read_bits_i32(5); // ry[4:0]
+            b[3] |= bstream.read_bit_i32() << 2; // bz[2]
+            r[3] |= bstream.read_bits_i32(5); // rz[4:0]
+            b[3] |= bstream.read_bit_i32() << 3; // bz[3]
+            partition = bstream.read_bits_i32(5); // d[4:0]
+            mode = 8;
+        }
+        // mode 10
+        0b11110 => {
+            // Partition indices: 46 bits
+            // Partition: 5 bits
+            // Color Endpoints: 72 bits (6666, 6666, 6666)
+            r[0] |= bstream.read_bits_i32(6); // rw[5:0]
+            g[3] |= bstream.read_bit_i32() << 4; // gz[4]
+            b[3] |= bstream.read_bit_i32(); // bz[0]
+            b[3] |= bstream.read_bit_i32() << 1; // bz[1]
+            b[2] |= bstream.read_bit_i32() << 4; // by[4]
+            g[0] |= bstream.read_bits_i32(6); // gw[5:0]
+            g[2] |= bstream.read_bit_i32() << 5; // gy[5]
+            b[2] |= bstream.read_bit_i32() << 5; // by[5]
+            b[3] |= bstream.read_bit_i32() << 2; // bz[2]
+            g[2] |= bstream.read_bit_i32() << 4; // gy[4]
+            b[0] |= bstream.read_bits_i32(6); // bw[5:0]
+            g[3] |= bstream.read_bit_i32() << 5; // gz[5]
+            b[3] |= bstream.read_bit_i32() << 3; // bz[3]
+            b[3] |= bstream.read_bit_i32() << 5; // bz[5]
+            b[3] |= bstream.read_bit_i32() << 4; // bz[4]
+            r[1] |= bstream.read_bits_i32(6); // rx[5:0]
+            g[2] |= bstream.read_bits_i32(4); // gy[3:0]
+            g[1] |= bstream.read_bits_i32(6); // gx[5:0]
+            g[3] |= bstream.read_bits_i32(4); // gz[3:0]
+            b[1] |= bstream.read_bits_i32(6); // bx[5:0]
+            b[2] |= bstream.read_bits_i32(4); // by[3:0]
+            r[2] |= bstream.read_bits_i32(6); // ry[5:0]
+            r[3] |= bstream.read_bits_i32(6); // rz[5:0]
+            partition = bstream.read_bits_i32(5); // d[4:0]
+            mode = 9;
+        }
+        // mode 11
+        0b00011 => {
+            // Partition indices: 63 bits
+            // Partition: 0 bits
+            // Color Endpoints: 60 bits (10.10, 10.10, 10.10)
+            r[0] |= bstream.read_bits_i32(10); // rw[9:0]
+            g[0] |= bstream.read_bits_i32(10); // gw[9:0]
+            b[0] |= bstream.read_bits_i32(10); // bw[9:0]
+            r[1] |= bstream.read_bits_i32(10); // rx[9:0]
+            g[1] |= bstream.read_bits_i32(10); // gx[9:0]
+            b[1] |= bstream.read_bits_i32(10); // bx[9:0]
+            mode = 10;
+        }
+        // mode 12
+        0b00111 => {
+            // Partition indices: 63 bits
+            // Partition: 0 bits
+            // Color Endpoints: 60 bits (11.9, 11.9, 11.9)
+            r[0] |= bstream.read_bits_i32(10); // rw[9:0]
+            g[0] |= bstream.read_bits_i32(10); // gw[9:0]
+            b[0] |= bstream.read_bits_i32(10); // bw[9:0]
+            r[1] |= bstream.read_bits_i32(9); // rx[8:0]
+            r[0] |= bstream.read_bit_i32() << 10; // rw[10]
+            g[1] |= bstream.read_bits_i32(9); // gx[8:0]
+            g[0] |= bstream.read_bit_i32() << 10; // gw[10]
+            b[1] |= bstream.read_bits_i32(9); // bx[8:0]
+            b[0] |= bstream.read_bit_i32() << 10; // bw[10]
+            mode = 11;
+        }
+        // mode 13
+        0b01011 => {
+            // Partition indices: 63 bits
+            // Partition: 0 bits
+            // Color Endpoints: 60 bits (12.8, 12.8, 12.8)
+            r[0] |= bstream.read_bits_i32(10); // rw[9:0]
+            g[0] |= bstream.read_bits_i32(10); // gw[9:0]
+            b[0] |= bstream.read_bits_i32(10); // bw[9:0]
+            r[1] |= bstream.read_bits_i32(8); // rx[7:0]
+            r[0] |= bstream.read_bits_reversed(2) << 10; // rx[10:11]
+            g[1] |= bstream.read_bits_i32(8); // gx[7:0]
+            g[0] |= bstream.read_bits_reversed(2) << 10; // gx[10:11]
+            b[1] |= bstream.read_bits_i32(8); // bx[7:0]
+            b[0] |= bstream.read_bits_reversed(2) << 10; // bx[10:11]
+            mode = 12;
+        }
+        // mode 14
+        0b01111 => {
+            // Partition indices: 63 bits
+            // Partition: 0 bits
+            // Color Endpoints: 60 bits (16.4, 16.4, 16.4)
+            r[0] |= bstream.read_bits_i32(10); // rw[9:0]
+            g[0] |= bstream.read_bits_i32(10); // gw[9:0]
+            b[0] |= bstream.read_bits_i32(10); // bw[9:0]
+            r[1] |= bstream.read_bits_i32(4); // rx[3:0]
+            r[0] |= bstream.read_bits_reversed(6) << 10; // rw[10:15]
+            g[1] |= bstream.read_bits_i32(4); // gx[3:0]
+            g[0] |= bstream.read_bits_reversed(6) << 10; // gw[10:15]
+            b[1] |= bstream.read_bits_i32(4); // bx[3:0]
+            b[0] |= bstream.read_bits_reversed(6) << 10; // bw[10:15]
+            mode = 13;
+        }
+        _ => {
+            // Modes 10011, 10111, 11011, and 11111 (not shown) are reserved.
+            // Do not use these in your encoder. If the hardware is passed blocks
+            // with one of these modes specified, the resulting decompressed block
+            // must contain all zeroes in all channels except for the alpha channel.
+            for i in 0..4 {
+                let start = i * destination_pitch;
+                let end = start + 4 * 3;
+                decompressed_block[start..end].fill(f16::ZERO);
+            }
+
+            return;
+        }
+    }
+
+    let num_partitions = if mode >= 10 { 0 } else { 1 };
+
+    let actual_bits0_mode = ACTUAL_BITS_COUNT[0][mode as usize] as i32;
+    if is_signed {
+        r[0] = extend_sign(r[0], actual_bits0_mode);
+        g[0] = extend_sign(g[0], actual_bits0_mode);
+        b[0] = extend_sign(b[0], actual_bits0_mode);
+    }
+
+    // Mode 11 (like Mode 10) does not use delta compression,
+    // and instead stores both color endpoints explicitly.
+    if mode != 9 && mode != 10 || is_signed {
+        for i in 1..(num_partitions + 1) * 2 {
+            r[i] = extend_sign(r[i], ACTUAL_BITS_COUNT[1][mode as usize] as i32);
+            g[i] = extend_sign(g[i], ACTUAL_BITS_COUNT[2][mode as usize] as i32);
+            b[i] = extend_sign(b[i], ACTUAL_BITS_COUNT[3][mode as usize] as i32);
+        }
+    }
+
+    if mode != 9 && mode != 10 {
+        for i in 1..(num_partitions + 1) * 2 {
+            r[i] = transform_inverse(r[i], r[0], actual_bits0_mode, is_signed);
+            g[i] = transform_inverse(g[i], g[0], actual_bits0_mode, is_signed);
+            b[i] = transform_inverse(b[i], b[0], actual_bits0_mode, is_signed);
+        }
+    }
+
+    for i in 0..(num_partitions + 1) * 2 {
+        r[i] = unquantize(r[i], actual_bits0_mode, is_signed);
+        g[i] = unquantize(g[i], actual_bits0_mode, is_signed);
+        b[i] = unquantize(b[i], actual_bits0_mode, is_signed);
+    }
+
+    let weights = if mode >= 10 { WEIGHT4 } else { WEIGHT3 };
+
+    for i in 0..4 {
+        for j in 0..4 {
+            let mut partition_set = if mode >= 10 {
+                if i | j == 0 {
+                    128i32
+                } else {
+                    0i32
+                }
+            } else {
+                PARTITION_SETS[partition as usize][i][j] as i32
+            };
+
+            let mut index_bits = if mode >= 10 { 4 } else { 3 };
+
+            // fix-up index is specified with one less bit
+            // The fix-up index for subset 0 is always index 0
+            if (partition_set & 0x80) != 0 {
+                index_bits -= 1;
+            }
+            partition_set &= 0x01;
+
+            let index = bstream.read_bits_i32(index_bits);
+
+            let ep_i = (partition_set * 2) as usize;
+            let out = i * destination_pitch + j * 3;
+
+            decompressed_block[out] = f16::from_bits(finish_unquantize(
+                interpolate(r[ep_i], r[ep_i + 1], weights, index),
+                is_signed,
+            ));
+            decompressed_block[out + 1] = f16::from_bits(finish_unquantize(
+                interpolate(g[ep_i], g[ep_i + 1], weights, index),
+                is_signed,
+            ));
+            decompressed_block[out + 2] = f16::from_bits(finish_unquantize(
+                interpolate(b[ep_i], b[ep_i + 1], weights, index),
+                is_signed,
+            ));
+        }
+    }
+}
+
+/// Decodes a BC6H block by reading 16 bytes from `compressed_block` and writing the RGB32F data into `decompressed_block` with `destination_pitch` many bytes per output row.
+#[cfg(feature = "half")]
+#[inline(always)]
+
+pub fn decode_block_bc6h_float(
+    compressed_block: &[u8],
+    decompressed_block: &mut [f32],
+    destination_pitch: usize,
+    is_signed: bool,
+) {
+    let mut block = [half::f16::ZERO; 48];
+    decode_block_bc6h(compressed_block, &mut block, 12, is_signed);
+
+    let mut decompressed = decompressed_block;
+
+    for i in 0..4 {
+        for j in 0..4 {
+            let offset = i * 12 + j * 3;
+            let pixel_offset = j * 3;
+
+            decompressed[pixel_offset] = block[offset].to_f32();
+            decompressed[pixel_offset + 1] = block[offset + 1].to_f32();
+            decompressed[pixel_offset + 2] = block[offset + 2].to_f32();
+        }
+        decompressed = &mut decompressed[destination_pitch..];
+    }
+}
+
 /// Decodes a BC7 block by reading 16 bytes from `compressed_block` and writing the RGBA8 data into `decompressed_block` with `destination_pitch` many bytes per output row.
 #[allow(clippy::needless_range_loop)]
 pub fn decode_block_bc7(
@@ -704,24 +1243,83 @@ pub fn decode_block_bc7(
     }
 }
 
-fn create_test_data(decompressed_block: &[u8]) {
-    let mut output = String::from("let expected_output = [\n    ");
-    for (i, &byte) in decompressed_block.iter().enumerate() {
-        if i > 0 && i % 16 == 0 {
-            output.push_str(",\n    ");
-        } else if i > 0 {
-            output.push_str(", ");
-        }
-        output.push_str(&format!("0x{:x}", byte));
-    }
-    output.push_str("\n];");
-
-    println!("{}", output);
-}
-
 #[inline]
 fn interpolate(a: i32, b: i32, weights: &[i32], index: i32) -> i32 {
     (a * (64 - weights[index as usize]) + b * weights[index as usize] + 32) >> 6
+}
+
+// http://graphics.stanford.edu/~seander/bithacks.html#VariableSignExtend
+#[inline]
+fn extend_sign(val: i32, bits: i32) -> i32 {
+    (val << (32 - bits)) >> (32 - bits)
+}
+
+#[inline]
+fn transform_inverse(val: i32, a0: i32, bits: i32, is_signed: bool) -> i32 {
+    // If the precision of A0 is "p" bits, then the transform algorithm is:
+    // B0 = (B0 + A0) & ((1 << p) - 1)
+    let transformed = (val + a0) & ((1 << bits) - 1);
+    if is_signed {
+        extend_sign(transformed, bits)
+    } else {
+        transformed
+    }
+}
+
+#[inline]
+fn unquantize(val: i32, bits: i32, is_signed: bool) -> i32 {
+    if !is_signed {
+        if bits >= 15 {
+            val
+        } else if val == 0 {
+            0
+        } else if val == ((1 << bits) - 1) {
+            0xFFFF
+        } else {
+            ((val << 16) + 0x8000) >> bits
+        }
+    } else if bits >= 16 {
+        val
+    } else {
+        let (s, v) = if val < 0 { (true, -val) } else { (false, val) };
+
+        let unq = if v == 0 {
+            0
+        } else if v >= ((1 << (bits - 1)) - 1) {
+            0x7FFF
+        } else {
+            ((v << 15) + 0x4000) >> (bits - 1)
+        };
+
+        if s {
+            -unq
+        } else {
+            unq
+        }
+    }
+}
+
+#[inline]
+fn finish_unquantize(val: i32, is_signed: bool) -> u16 {
+    if !is_signed {
+        // Scale the magnitude by 31 / 64
+        ((val * 31) >> 6) as u16
+    } else {
+        // Scale the magnitude by 31 / 32
+        let scaled = if val < 0 {
+            -(((-val) * 31) >> 5)
+        } else {
+            (val * 31) >> 5
+        };
+
+        let (sign_bit, magnitude) = if scaled < 0 {
+            (0x8000, -scaled)
+        } else {
+            (0, scaled)
+        };
+
+        (sign_bit | magnitude) as u16
+    }
 }
 
 /// Internal bitstream helper for reading bits from compressed data
@@ -740,13 +1338,16 @@ impl BitStream {
         Self { low, high }
     }
 
-    /// Read a single bit.
     #[inline]
     fn read_bit(&mut self) -> u32 {
         self.read_bits(1)
     }
 
-    /// Read specified number of bits.
+    #[inline]
+    fn read_bit_i32(&mut self) -> i32 {
+        self.read_bits(1) as i32
+    }
+
     #[inline]
     pub fn read_bits(&mut self, num_bits: u32) -> u32 {
         let mask = (1u64 << num_bits) - 1;
@@ -761,12 +1362,16 @@ impl BitStream {
         bits
     }
 
-    /// Read bits in reverse order.
     #[inline]
-    fn read_bits_reversed(&mut self, num_bits: u32) -> u32 {
-        let mut bits = self.read_bits(num_bits);
+    pub fn read_bits_i32(&mut self, num_bits: u32) -> i32 {
+        self.read_bits(num_bits) as i32
+    }
+
+    #[inline]
+    fn read_bits_reversed(&mut self, num_bits: u32) -> i32 {
+        let mut bits = self.read_bits_i32(num_bits);
         // Reverse the bits.
-        let mut result = 0u32;
+        let mut result = 0;
 
         (0..num_bits).for_each(|_| {
             result <<= 1;
@@ -1083,6 +1688,92 @@ mod tests {
             &expected_output,
             "BC5 interpolated",
         );
+    }
+
+    #[cfg(feature = "half")]
+    #[test]
+    fn test_bc6h_block_0() {
+        use half::f16;
+
+        let compressed_block = [
+            0x40, 0xAF, 0xF6, 0x0B, 0xFD, 0x2E, 0xFF, 0xFF, 0x11, 0x71, 0x10, 0xA1, 0x21, 0xF2,
+            0x33, 0x73,
+        ];
+        let expected_output = [
+            f16::from_bits(0x5BAB),
+            f16::from_bits(0x84B9),
+            f16::from_bits(0xDBE9),
+            f16::from_bits(0x5BA2),
+            f16::from_bits(0x84F6),
+            f16::from_bits(0xDBF1),
+            f16::from_bits(0x5B99),
+            f16::from_bits(0x8533),
+            f16::from_bits(0xDBFA),
+            f16::from_bits(0x5D9B),
+            f16::from_bits(0x8307),
+            f16::from_bits(0xD847),
+            f16::from_bits(0x5B7E),
+            f16::from_bits(0x85F0),
+            f16::from_bits(0xDC15),
+            f16::from_bits(0x5BA2),
+            f16::from_bits(0x84F6),
+            f16::from_bits(0xDBF1),
+            f16::from_bits(0x5CC3),
+            f16::from_bits(0x81E8),
+            f16::from_bits(0xD8D6),
+            f16::from_bits(0x5D9B),
+            f16::from_bits(0x8307),
+            f16::from_bits(0xD847),
+            f16::from_bits(0x5BA2),
+            f16::from_bits(0x84F6),
+            f16::from_bits(0xDBF1),
+            f16::from_bits(0x5B6D),
+            f16::from_bits(0x866B),
+            f16::from_bits(0xDC27),
+            f16::from_bits(0x5C27),
+            f16::from_bits(0x8117),
+            f16::from_bits(0xD93F),
+            f16::from_bits(0x5CC3),
+            f16::from_bits(0x81E8),
+            f16::from_bits(0xD8D6),
+            f16::from_bits(0x5BA2),
+            f16::from_bits(0x84F6),
+            f16::from_bits(0xDBF1),
+            f16::from_bits(0x5CFE),
+            f16::from_bits(0x8235),
+            f16::from_bits(0xD8AF),
+            f16::from_bits(0x5C5B),
+            f16::from_bits(0x815C),
+            f16::from_bits(0xD91C),
+            f16::from_bits(0x5D66),
+            f16::from_bits(0x82C1),
+            f16::from_bits(0xD869),
+        ];
+
+        let mut decoded = [f16::ZERO; 48];
+        decode_block_bc6h(&compressed_block, &mut decoded, 12, true);
+
+        assert_eq!(&decoded[..], &expected_output[..], "BC6H block mismatch");
+    }
+
+    #[test]
+    #[rustfmt::skip]
+    fn test_bc6h_block_0_float() {
+        let compressed_block = [
+            0x40, 0xAF, 0xF6, 0x0B, 0xFD, 0x2E, 0xFF, 0xFF, 0x11, 0x71, 0x10, 0xA1, 0x21, 0xF2,
+            0x33, 0x73,
+        ];
+
+        let expected_output: [f32; 48] = [
+            245.375, -0.000072062016, -253.125, 244.25, -0.0000756979, -254.125, 243.125, -0.00007933378, -255.25, 358.75, -0.0000461936, -136.875, 239.75, -0.00009059906, -261.25, 244.25,
+            -0.0000756979, -254.125, 304.75, -0.000029087067, -154.75, 358.75, -0.0000461936, -136.875, 244.25, -0.0000756979, -254.125, 237.625, -0.00009793043, -265.75, 265.75, -0.000016629696,
+            -167.875, 304.75, -0.000029087067, -154.75, 244.25, -0.0000756979, -254.125, 319.5, -0.000033676624, -149.875, 278.75, -0.000020742416, -163.5, 345.5, -0.000042021275, -141.125
+        ];
+
+        let mut decoded = [0.0_f32; 48];
+        decode_block_bc6h_float(&compressed_block, &mut decoded, 12, true);
+
+        assert_eq!(&decoded[..], &expected_output[..], "BC6H block mismatch");
     }
 
     #[test]
