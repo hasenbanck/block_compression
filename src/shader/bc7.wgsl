@@ -341,16 +341,6 @@ fn block_pca_axis(axis: ptr<function, vec4<f32>>, dc: ptr<function, vec4<f32>>, 
     compute_axis(axis, &covar, power_iterations, channels);
 }
 
-fn block_pca_bound(block: ptr<function, array<f32, 64>>, mask: u32, channels: u32) -> f32 {
-    var stats: array<f32, 15>;
-    compute_stats_masked(&stats, block, mask, channels);
-
-    var covar: array<f32, 10>;
-    covar_from_stats(&covar, stats, channels);
-
-    return get_pca_bound(covar, channels);
-}
-
 fn block_pca_bound_split(block: ptr<function, array<f32, 64>>, mask: u32, full_stats: array<f32, 15>, channels: u32) -> f32 {
     var stats: array<f32, 15>;
     compute_stats_masked(&stats, block, mask, channels);
@@ -416,7 +406,7 @@ fn ep_quant0367(qep: ptr<function, array<i32, 24>>, ep: ptr<function, array<f32,
     }
 }
 
-fn ep_quant1(qep: ptr<function, array<i32, 24>>, ep: ptr<function, array<f32, 24>>, offset: u32, mode: u32) {
+fn ep_quant1(qep: ptr<function, array<i32, 24>>, ep: ptr<function, array<f32, 24>>, offset: u32) {
     var qep_b: array<i32, 16>;
 
     for (var b = 0u; b < 2u; b++) {
@@ -466,7 +456,7 @@ fn ep_quant(qep: ptr<function, array<i32, 24>>, ep: ptr<function, array<f32, 24>
         }
     } else if (mode == 1u) {
         for (var i = 0u; i < pairs; i++) {
-            ep_quant1(qep, ep, i * 8u, mode);
+            ep_quant1(qep, ep, i * 8u);
         }
     } else if (mode == 2u || mode == 4u || mode == 5u) {
         for (var i = 0u; i < pairs; i++) {
@@ -687,7 +677,6 @@ fn channel_opt_endpoints(ep: ptr<function, vec2<f32>>, channel_block: ptr<functi
             qbits_shifted >>= 4u;
 
             let x = f32(levels - 1) - q;
-            let y = q;
 
             sum_q += q;
             sum_qq += q * q;
@@ -779,7 +768,6 @@ fn opt_endpoints(ep: ptr<function, array<f32, 24>>, offset: u32, block: ptr<func
             }
 
             let x = f32(levels - 1) - q;
-            let y = q;
 
             sum_q += q;
             sum_qq += q * q;
@@ -1273,6 +1261,7 @@ fn bc7_enc_mode45(state: ptr<function, State>, block: ptr<function, array<f32, 6
         bc7_enc_mode45_candidate(&best_candidate, &best_err, block, 5u, p, 0u);
     }
 
+
     // Mode 5
     if (best_err < (*state).best_err) {
         (*state).best_err = best_err;
@@ -1327,8 +1316,7 @@ fn bc7_enc_mode7(state: ptr<function, State>, block: ptr<function, array<f32, 64
         part_list[part] = part + bound * 64;
     }
 
-    let partial_count = settings.fast_skip_threshold_mode7;
-    partial_sort_list(&part_list, 64, i32(partial_count));
+    partial_sort_list(&part_list, 64, i32(settings.fast_skip_threshold_mode7));
     bc7_enc_mode01237(state, block, 7u, part_list, settings.fast_skip_threshold_mode7);
 }
 

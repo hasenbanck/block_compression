@@ -81,11 +81,11 @@ impl GpuBlockCompressor {
         };
 
         let shader_module_bc1_to_5 =
-            device.create_shader_module(include_wgsl!("shader/BC1_to_5.wgsl"));
+            device.create_shader_module(include_wgsl!("shader/bc1_to_5.wgsl"));
         #[cfg(feature = "bc6h")]
-        let shader_module_bc6h = device.create_shader_module(include_wgsl!("shader/BC6H.wgsl"));
+        let shader_module_bc6h = device.create_shader_module(include_wgsl!("shader/bc6h.wgsl"));
         #[cfg(feature = "bc7")]
-        let shader_module_bc7 = device.create_shader_module(include_wgsl!("shader/BC7.wgsl"));
+        let shader_module_bc7 = device.create_shader_module(include_wgsl!("shader/bc7.wgsl"));
 
         let uniforms_buffer = device.create_buffer(&BufferDescriptor {
             label: Some("uniforms"),

@@ -78,15 +78,15 @@ impl BC6HSettings {
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Pod, Zeroable)]
 #[repr(C)]
 pub struct BC7Settings {
-    refine_iterations: [u32; 8],
-    mode_selection: [u32; 4],
-    skip_mode2: u32,
-    fast_skip_threshold_mode1: u32,
-    fast_skip_threshold_mode3: u32,
-    fast_skip_threshold_mode7: u32,
-    mode45_channel0: u32,
-    refine_iterations_channel: u32,
-    channels: u32,
+    pub(crate) refine_iterations: [u32; 8],
+    pub(crate) mode_selection: [u32; 4],
+    pub(crate) skip_mode2: u32,
+    pub(crate) fast_skip_threshold_mode1: u32,
+    pub(crate) fast_skip_threshold_mode3: u32,
+    pub(crate) fast_skip_threshold_mode7: u32,
+    pub(crate) mode45_channel0: u32,
+    pub(crate) refine_iterations_channel: u32,
+    pub(crate) channels: u32,
 }
 
 #[cfg(feature = "bc7")]

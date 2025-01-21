@@ -3,7 +3,7 @@ use block_compression::{
     CompressionVariant, GpuBlockCompressor,
 };
 use half::f16;
-use intel_tex_2::{bc6h, bc7, RgbaSurface};
+use intel_tex_2::{bc6h, RgbaSurface};
 use wgpu::{CommandEncoderDescriptor, ComputePassDescriptor, TextureViewDescriptor};
 
 use self::common::{
@@ -145,7 +145,7 @@ fn compress_image_reference(
     data: &[u8],
 ) -> Vec<u8> {
     match variant {
-        CompressionVariant::BC1 | CompressionVariant::BC3 => {
+        CompressionVariant::BC1 | CompressionVariant::BC3 | CompressionVariant::BC7(..) => {
             let output_size = variant.blocks_byte_size(width, height);
             let mut blocks = vec![0; output_size];
             compress_rgba8(variant, data, &mut blocks, width, height, width * 4);
@@ -181,43 +181,8 @@ fn compress_image_reference(
                 },
             )
         }
-        CompressionVariant::BC7(setting) => {
-            let settings = if setting == BC7Settings::alpha_ultrafast() {
-                bc7::alpha_ultra_fast_settings()
-            } else if setting == BC7Settings::alpha_very_fast() {
-                bc7::alpha_very_fast_settings()
-            } else if setting == BC7Settings::alpha_fast() {
-                bc7::alpha_fast_settings()
-            } else if setting == BC7Settings::alpha_basic() {
-                bc7::alpha_basic_settings()
-            } else if setting == BC7Settings::alpha_slow() {
-                bc7::alpha_slow_settings()
-            } else if setting == BC7Settings::opaque_ultra_fast() {
-                bc7::opaque_ultra_fast_settings()
-            } else if setting == BC7Settings::opaque_very_fast() {
-                bc7::opaque_very_fast_settings()
-            } else if setting == BC7Settings::opaque_fast() {
-                bc7::opaque_fast_settings()
-            } else if setting == BC7Settings::opaque_basic() {
-                bc7::opaque_basic_settings()
-            } else if setting == BC7Settings::opaque_slow() {
-                bc7::opaque_slow_settings()
-            } else {
-                panic!("Unsupported BC7 setting");
-            };
-
-            bc7::compress_blocks(
-                &settings,
-                &RgbaSurface {
-                    data,
-                    width,
-                    height,
-                    stride: width * 4,
-                },
-            )
-        }
         _ => {
-            panic!("Unsupported variant or setting")
+            panic!("Unsupported variant")
         }
     }
 }
@@ -316,9 +281,9 @@ fn compare_psnr(image_path: &str, variant: CompressionVariant, channels: u32) {
 
     const DIFFERENCE: f64 = 0.01;
 
-    if reference_psnr.overall_psnr - psnr.overall_psnr > DIFFERENCE {
+    if f64::abs(reference_psnr.overall_psnr - psnr.overall_psnr) > DIFFERENCE {
         panic!(
-            "Significant overall PSNR difference for image `{image_name}`: {:.3} > {:.3}",
+            "Significant overall PSNR difference for image `{image_name}`: {:.3} != {:.3}",
             reference_psnr.overall_psnr, psnr.overall_psnr
         );
     }
