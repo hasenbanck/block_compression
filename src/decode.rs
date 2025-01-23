@@ -355,6 +355,10 @@ pub fn decompress_blocks_as_rgba8(
     );
 
     match variant {
+        #[cfg(feature = "astc")]
+        CompressionVariant::ASTC(..) => {
+            todo!();
+        }
         #[cfg(feature = "bc15")]
         CompressionVariant::BC1 => {
             decompress_rgba8::<BC1Decoder>(width, height, blocks_data, rgba_data)

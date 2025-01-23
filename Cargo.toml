@@ -21,7 +21,8 @@ exclude = ["tests/images/"]
 maintenance = { status = "actively-developed" }
 
 [features]
-default = ["bc15", "bc6h", "bc7", "wgpu"]
+default = ["astc", "bc15", "bc6h", "bc7", "wgpu"]
+astc = []
 bc15 = []
 bc6h = ["half"]
 bc7 = []
@@ -45,7 +46,7 @@ pollster = "0.4"
 wgpu = "24"
 
 [package.metadata.docs.rs]
-features = ["bc6h", "bc7", "half"]
+features = ["astc", "bc6h", "bc7", "half", "wgpu"]
 rustdoc-args = ["--cfg", "docsrs"]
 
 [workspace]

@@ -63,15 +63,22 @@ pub use settings::BC6HSettings;
 #[cfg(feature = "bc7")]
 #[cfg_attr(docsrs, doc(cfg(feature = "bc7")))]
 pub use settings::BC7Settings;
+#[cfg(feature = "astc")]
+#[cfg_attr(docsrs, doc(cfg(feature = "astc")))]
+pub use settings::{ASTCBlockSize, ASTCSettings};
 
 /// Block compression variants supported by this crate.
 #[derive(Copy, Clone, Debug)]
-#[cfg(any(feature = "bc15", feature = "bc6h", feature = "bc7"))]
+#[cfg(any(feature = "astc", feature = "bc15", feature = "bc6h", feature = "bc7"))]
 #[cfg_attr(
     docsrs,
-    doc(cfg(any(feature = "bc15", feature = "bc6h", feature = "bc7")))
+    doc(cfg(any(feature = "astc", feature = "bc15", feature = "bc6h", feature = "bc7")))
 )]
 pub enum CompressionVariant {
+    #[cfg(feature = "astc")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "astc")))]
+    /// ASTC compression (flexible)
+    ASTC(ASTCSettings),
     #[cfg(feature = "bc15")]
     #[cfg_attr(docsrs, doc(cfg(feature = "bc15")))]
     /// BC1 compression (RGB)
@@ -102,24 +109,24 @@ pub enum CompressionVariant {
     BC7(BC7Settings),
 }
 
-#[cfg(any(feature = "bc15", feature = "bc6h", feature = "bc7"))]
+#[cfg(any(feature = "astc", feature = "bc15", feature = "bc6h", feature = "bc7"))]
 impl PartialEq for CompressionVariant {
     fn eq(&self, other: &Self) -> bool {
         std::mem::discriminant(self) == std::mem::discriminant(other)
     }
 }
 
-#[cfg(any(feature = "bc15", feature = "bc6h", feature = "bc7"))]
+#[cfg(any(feature = "astc", feature = "bc15", feature = "bc6h", feature = "bc7"))]
 impl Eq for CompressionVariant {}
 
-#[cfg(any(feature = "bc15", feature = "bc6h", feature = "bc7"))]
+#[cfg(any(feature = "astc", feature = "bc15", feature = "bc6h", feature = "bc7"))]
 impl Hash for CompressionVariant {
     fn hash<H: Hasher>(&self, state: &mut H) {
         std::mem::discriminant(self).hash(state);
     }
 }
 
-#[cfg(any(feature = "bc15", feature = "bc6h", feature = "bc7"))]
+#[cfg(any(feature = "astc", feature = "bc15", feature = "bc6h", feature = "bc7"))]
 impl CompressionVariant {
     /// Returns the bytes per row for the given width.
     ///
@@ -134,17 +141,33 @@ impl CompressionVariant {
     /// Returns the byte size required for storing compressed blocks for the given dimensions.
     ///
     /// The size is calculated based on the block compression format and rounded up dimensions.
-    /// Width and height are rounded up to the nearest multiple of 4.
+    /// Width and height are rounded up to the nearest multiple of the block size.
     pub const fn blocks_byte_size(self, width: u32, height: u32) -> usize {
-        let block_width = (width as usize + 3) / 4;
-        let block_height = (height as usize + 3) / 4;
-        let block_count = block_width * block_height;
+        let (block_width, block_height) = match self {
+            CompressionVariant::ASTC(settings) => (
+                settings.block_width as usize,
+                settings.block_height as usize,
+            ),
+            CompressionVariant::BC1
+            | CompressionVariant::BC2
+            | CompressionVariant::BC3
+            | CompressionVariant::BC4
+            | CompressionVariant::BC5
+            | CompressionVariant::BC6H(_)
+            | CompressionVariant::BC7(_) => (4, 4),
+        };
+
+        let block_count_width = (width as usize + (block_width - 1)) / block_width;
+        let block_count_height = (height as usize + (block_height - 1)) / block_height;
+        let block_count = block_count_width * block_count_height;
         let block_size = self.block_byte_size() as usize;
         block_count * block_size
     }
 
     const fn block_byte_size(self) -> u32 {
         match self {
+            #[cfg(feature = "astc")]
+            Self::ASTC(..) => 32,
             #[cfg(feature = "bc15")]
             Self::BC1 | Self::BC4 => 8,
             #[cfg(feature = "bc15")]
@@ -159,6 +182,8 @@ impl CompressionVariant {
     #[cfg(feature = "wgpu")]
     const fn name(self) -> &'static str {
         match self {
+            #[cfg(feature = "astc")]
+            Self::ASTC(..) => "astc",
             #[cfg(feature = "bc15")]
             Self::BC1 => "bc1",
             #[cfg(feature = "bc15")]
@@ -179,6 +204,8 @@ impl CompressionVariant {
     #[cfg(feature = "wgpu")]
     const fn entry_point(self) -> &'static str {
         match self {
+            #[cfg(feature = "astc")]
+            Self::ASTC(..) => "compress_astc",
             #[cfg(feature = "bc15")]
             Self::BC1 => "compress_bc1",
             #[cfg(feature = "bc15")]

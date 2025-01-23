@@ -1,7 +1,8 @@
 use std::{fs::File, path::PathBuf, sync::Arc, time::Instant};
 
 use block_compression::{
-    half::f16, BC6HSettings, BC7Settings, CompressionVariant, GpuBlockCompressor,
+    half::f16, ASTCBlockSize, ASTCSettings, BC6HSettings, BC7Settings, CompressionVariant,
+    GpuBlockCompressor,
 };
 use bytemuck::cast_slice;
 use ddsfile::{AlphaMode, D3D10ResourceDimension, Dds, DxgiFormat, NewDxgiParams};
@@ -334,6 +335,7 @@ fn write_dds_file(
 
 fn dxgi_format(variant: CompressionVariant) -> DxgiFormat {
     match variant {
+        CompressionVariant::ASTC(..) => DxgiFormat::Unknown,
         CompressionVariant::BC1 => DxgiFormat::BC1_UNorm_sRGB,
         CompressionVariant::BC2 => DxgiFormat::BC2_UNorm_sRGB,
         CompressionVariant::BC3 => DxgiFormat::BC3_UNorm_sRGB,
@@ -347,6 +349,7 @@ fn dxgi_format(variant: CompressionVariant) -> DxgiFormat {
 fn print_help() {
     println!("Usage: compressor <compression_variant> <input_file>");
     println!("\nCompression variants:");
+    println!("  astc - ASTC compression (variable)");
     println!("  bc1  - BC1 compression (RGB)");
     println!("  bc2  - BC2 compression with sharp alpha (RGBA)");
     println!("  bc3  - BC3 compression with smooth alpha (RGBA)");
@@ -365,6 +368,7 @@ fn parse_args() -> Option<(CompressionVariant, String)> {
     }
 
     let variant = match args[1].to_lowercase().as_str() {
+        "astc" => CompressionVariant::ASTC(ASTCSettings::alpha_slow(ASTCBlockSize::_6x6)),
         "bc1" => CompressionVariant::BC1,
         "bc2" => CompressionVariant::BC2,
         "bc3" => CompressionVariant::BC3,

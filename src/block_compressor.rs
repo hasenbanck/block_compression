@@ -367,6 +367,10 @@ impl GpuBlockCompressor {
             .expect("Can't find bind group layout for variant");
 
         let bind_group = match variant {
+            #[cfg(feature = "astc")]
+            CompressionVariant::ASTC(..) => {
+                todo!();
+            }
             #[cfg(feature = "bc15")]
             CompressionVariant::BC1
             | CompressionVariant::BC2
