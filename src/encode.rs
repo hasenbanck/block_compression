@@ -289,11 +289,12 @@ pub fn compress_astc(
     );
 
     let mut ranked_modes = [0u32; ASTC_MAX_RANKED_MODES as usize];
+    let mut pixels = [0.0; 256];
 
     for yy in 0..block_height {
         for xx in 0..block_width {
-            let mode_ranker = ModeRankerASTC::new(settings);
-            mode_ranker.rank(rgba_data, xx, yy, &mut ranked_modes);
+            let mut mode_ranker = ModeRankerASTC::new(settings);
+            mode_ranker.rank(rgba_data, xx, yy, stride, &mut ranked_modes, &mut pixels);
 
             let mut best_score = f32::INFINITY;
 
@@ -308,6 +309,7 @@ pub fn compress_astc(
                     yy,
                     stride,
                     &mut best_score,
+                    &pixels,
                 );
             }
         }
