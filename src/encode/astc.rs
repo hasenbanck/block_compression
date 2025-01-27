@@ -4,7 +4,7 @@ mod test;
 
 use std::f32::consts::PI;
 
-use bytemuck::cast_slice_mut;
+use bytemuck::{cast_slice, cast_slice_mut};
 pub(crate) use constants::ASTC_MAX_RANKED_MODES;
 
 use self::constants::{
@@ -381,6 +381,29 @@ impl AstcBlock {
         }
     }
 
+    fn from_mode_parameters(packed_mode: u32, channels: u32) -> Self {
+        let mut block = Self {
+            width: 2 + get_bits(packed_mode, 13, 15) as i32,
+            height: 2 + get_bits(packed_mode, 16, 18) as i32,
+            dual_plane: get_bits(packed_mode, 19, 19) as u8,
+            weight_range: get_bits(packed_mode, 0, 3) as i32,
+            weights: [0; 64],
+            color_component_selector: get_bits(packed_mode, 4, 5) as i32,
+            partitions: 1,
+            partition_id: 0,
+            color_endpoint_pairs: 0,
+            channels: channels as i32,
+            color_endpoint_modes: [0; 4],
+            endpoint_range: get_bits(packed_mode, 8, 12) as i32,
+            endpoints: [0; 18],
+        };
+
+        block.color_endpoint_modes[0] = (get_bits(packed_mode, 6, 7) * 2 + 6) as i32;
+        block.color_endpoint_pairs = 1 + (block.color_endpoint_modes[0] / 4);
+
+        block
+    }
+
     fn can_store(value: i32, bits: i32) -> bool {
         if value < 0 {
             return false;
@@ -697,20 +720,6 @@ impl AstcBlock {
             data[i] |= rdata[3 - i].reverse_bits();
         }
     }
-
-    fn load_mode_parameters(&mut self, packed_mode: u32) {
-        self.width = 2 + get_bits(packed_mode, 13, 15) as i32;
-        self.height = 2 + get_bits(packed_mode, 16, 18) as i32;
-        self.dual_plane = get_bits(packed_mode, 19, 19) as u8;
-        self.partitions = 1;
-
-        self.weight_range = get_bits(packed_mode, 0, 3) as i32;
-        self.color_component_selector = get_bits(packed_mode, 4, 5) as i32;
-        self.partition_id = 0;
-        self.color_endpoint_modes[0] = (get_bits(packed_mode, 6, 7) * 2 + 6) as i32;
-        self.color_endpoint_pairs = 1 + (self.color_endpoint_modes[0] / 4);
-        self.endpoint_range = get_bits(packed_mode, 8, 12) as i32;
-    }
 }
 
 pub(crate) struct ModeRankerASTC<'a> {
@@ -749,14 +758,18 @@ impl<'a> ModeRankerASTC<'a> {
         let width = self.settings.block_width as usize;
         let height = self.settings.block_height as usize;
 
+        let rgba: &[u32] = cast_slice(rgba_data);
+
         for y in 0..height {
             for x in 0..width {
-                let src_idx = (yy * height + y) * stride + (xx * width + x) * 4;
+                let src_idx = ((yy * height + y) * stride + (xx * width + x) * 4) / 4;
+                let rgba_val = rgba[src_idx];
 
-                pixels[y * 8 + x] = rgba_data[src_idx] as f32;
-                pixels[PITCH + y * STRIDE + x] = rgba_data[src_idx + 1] as f32;
-                pixels[2 * PITCH + y * STRIDE + x] = rgba_data[src_idx + 2] as f32;
-                pixels[3 * PITCH + y * STRIDE + x] = rgba_data[src_idx + 3] as f32;
+                pixels[y * STRIDE + x] = ((rgba_val >> 0) & 0xFF) as f32; // R
+                pixels[PITCH + y * STRIDE + x] = ((rgba_val >> 8) & 0xFF) as f32; // G
+                pixels[2 * PITCH + y * STRIDE + x] = ((rgba_val >> 16) & 0xFF) as f32; // B
+                pixels[3 * PITCH + y * STRIDE + x] = ((rgba_val >> 24) & 0xFF) as f32;
+                // A
             }
         }
     }
@@ -820,9 +833,6 @@ impl<'a> ModeRankerASTC<'a> {
     fn compute_metrics(&mut self, pixels: &[f32; 256]) {
         // The ISPC code did copy the pixel by hand, but we can just use copy
         // here instead, since the operations are byte for byte the same.
-        // This is the same as doing this by hand:
-        // let mut temp_pixels = [0.0f32; 256];
-        // temp_pixels.copy_from_slice(pixels);
         let mut pset = PixelSet {
             pixels: *pixels,
             block_width: self.settings.block_width as i32,
@@ -983,7 +993,9 @@ impl<'a> ModeRankerASTC<'a> {
 
         let mut quant_error = 0.0;
         quant_error += 2.0 * sq_norm * sq_rcp_w_levels;
-        quant_error += 9000.0 * (block.height * block.width) as f32 * sq_rcp_ep_levels;
+        quant_error += 9000.0
+            * (self.settings.block_height * self.settings.block_width) as f32
+            * sq_rcp_ep_levels;
 
         scale_error + pca_error + quant_error
     }
@@ -1024,9 +1036,8 @@ impl<'a> ModeRankerASTC<'a> {
         let mut count = -1;
 
         for &packed_mode in PACKED_MODES.iter() {
-            let mut block = AstcBlock::from_mode_ranker(self);
-
-            block.load_mode_parameters(packed_mode);
+            // TODO: NHA The original code did use another "astc_mode" struct and not a block. Important?!
+            let block = AstcBlock::from_mode_parameters(packed_mode, self.settings.channels);
 
             if block.height > self.settings.block_height as i32
                 || block.width > self.settings.block_width as i32
