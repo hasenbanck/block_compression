@@ -1,5 +1,4 @@
 pub(crate) const ASTC_MAX_RANKED_MODES: u32 = 64;
-pub(crate) const ASTC_PACKED_MODES_COUNT: usize = 3334;
 
 pub(crate) static RANGE_TABLE: &[[i32; 3]; 21] = &[
     //2^ 3^ 5^
@@ -26,7 +25,7 @@ pub(crate) static RANGE_TABLE: &[[i32; 3]; 21] = &[
     [8, 0, 0], // 0..255
 ];
 
-pub(crate) static PACKED_MODES: &[u32; ASTC_PACKED_MODES_COUNT] = &[
+pub(crate) static PACKED_MODES: &[u32; 3334] = &[
     0x0006D400, 0x0016D340, 0x0026D380, 0x0036CDC0, 0x00469400, 0x00569401, 0x00668702, 0x00769440,
     0x00868D41, 0x00969480, 0x00A68D81, 0x00B693C0, 0x00C688C1, 0x00D4D400, 0x00E4D401, 0x00F4C702,
     0x0104D440, 0x0114CD41, 0x0124D480, 0x0134CD81, 0x0144D3C0, 0x0154C8C1, 0x01667400, 0x01767401,
@@ -484,10 +483,10 @@ pub(crate) static FILTER_DATA: &[f32; 309] = &[
     0.060592, -0.226268, 0.981106,
 ];
 
-pub(crate) static FILTERBANK: &[[i32; 5]; 5] = &[
-    [0, 8, -1, -1, -1],
-    [20, 30, 45, -1, -1],
-    [65, 77, 95, 119, -1],
-    [-1, -1, -1, -1, -1],
+pub(crate) static FILTERBANK: &[[usize; 5]; 5] = &[
+    [0, 8, 0, 0, 0],
+    [20, 30, 45, 0, 0],
+    [65, 77, 95, 119, 0],
+    [0, 0, 0, 0, 0],
     [149, 165, 189, 221, 261],
 ];

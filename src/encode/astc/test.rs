@@ -26,8 +26,7 @@ fn pack_block_4x4_0() {
     };
     const EXPECTED_OUTPUT: [u32; 4] = [0xD6E70242, 0x3020B260, 0xEE484AA, 0x817BC991];
 
-    let mut data = [0; 4];
-    INPUT_BLOCK.pack(&mut data);
+    let data = INPUT_BLOCK.pack();
 
     assert_eq!(data, EXPECTED_OUTPUT)
 }
@@ -58,8 +57,7 @@ fn pack_block_4x4_1() {
 
     const EXPECTED_OUTPUT: [u32; 4] = [0x95C50251, 0x6C74D4EB, 0x4D5B5780, 0xEB452F84];
 
-    let mut data = [0; 4];
-    INPUT_BLOCK.pack(&mut data);
+    let data = INPUT_BLOCK.pack();
 
     assert_eq!(data, EXPECTED_OUTPUT)
 }
@@ -90,8 +88,7 @@ fn pack_block_4x4_2() {
 
     const EXPECTED_OUTPUT: [u32; 4] = [0xBDDF05BF, 0x6E72E6F3, 0xBF52D400, 0x24403DDC];
 
-    let mut data = [0; 4];
-    INPUT_BLOCK.pack(&mut data);
+    let data = INPUT_BLOCK.pack();
 
     assert_eq!(data, EXPECTED_OUTPUT)
 }
@@ -122,8 +119,7 @@ fn pack_block_4x4_3() {
 
     const EXPECTED_OUTPUT: [u32; 4] = [0xB72705CF, 0xE60F675, 0xF85F6002, 0x93BDD5EE];
 
-    let mut data = [0; 4];
-    INPUT_BLOCK.pack(&mut data);
+    let data = INPUT_BLOCK.pack();
 
     assert_eq!(data, EXPECTED_OUTPUT)
 }
@@ -154,8 +150,7 @@ fn pack_block_4x4_4() {
 
     const EXPECTED_OUTPUT: [u32; 4] = [0x3B290241, 0x7476B8B5, 0xDA3FB000, 0x509FE933];
 
-    let mut data = [0; 4];
-    INPUT_BLOCK.pack(&mut data);
+    let data = INPUT_BLOCK.pack();
 
     assert_eq!(data, EXPECTED_OUTPUT)
 }
@@ -235,25 +230,6 @@ fn rank_block_fast() {
         185, 255, 183, 183, 183, 255, 184, 176, 171, 255,
     ];
 
-    let expected_pixels: [f32; 256] = [
-        190.0, 189.0, 189.0, 185.0, 0.0, 0.0, 0.0, 0.0, 191.0, 189.0, 188.0, 185.0, 0.0, 0.0, 0.0,
-        0.0, 188.0, 187.0, 187.0, 183.0, 0.0, 0.0, 0.0, 0.0, 185.0, 185.0, 183.0, 184.0, 0.0, 0.0,
-        0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
-        0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 190.0,
-        189.0, 189.0, 177.0, 0.0, 0.0, 0.0, 0.0, 191.0, 189.0, 188.0, 171.0, 0.0, 0.0, 0.0, 0.0,
-        188.0, 187.0, 187.0, 162.0, 0.0, 0.0, 0.0, 0.0, 185.0, 185.0, 183.0, 176.0, 0.0, 0.0, 0.0,
-        0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
-        0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 190.0, 189.0,
-        189.0, 172.0, 0.0, 0.0, 0.0, 0.0, 191.0, 189.0, 188.0, 164.0, 0.0, 0.0, 0.0, 0.0, 188.0,
-        187.0, 187.0, 151.0, 0.0, 0.0, 0.0, 0.0, 185.0, 185.0, 183.0, 171.0, 0.0, 0.0, 0.0, 0.0,
-        0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
-        0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 255.0, 255.0, 255.0,
-        255.0, 0.0, 0.0, 0.0, 0.0, 255.0, 255.0, 255.0, 255.0, 0.0, 0.0, 0.0, 0.0, 255.0, 255.0,
-        255.0, 255.0, 0.0, 0.0, 0.0, 0.0, 255.0, 255.0, 255.0, 255.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
-        0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
-        0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
-    ];
-
     let expected_modes: [u32; 64] = [
         1005736776, 1006784585, 1004688455, 1007832650, 1027756231, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
         0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
@@ -267,7 +243,41 @@ fn rank_block_fast() {
     let mut mode_buffer = [0; 64];
     mode_ranker.rank(&rgba_data, 0, 0, 16, &mut mode_buffer, &mut pixels);
 
-    assert_eq!(expected_pixels, pixels);
+    assert_eq!(expected_modes, mode_buffer)
+}
+
+#[test]
+fn rank_block_slow() {
+    let rgba_data: [u8; 64] = [
+        190, 190, 190, 255, 189, 189, 189, 255, 189, 189, 189, 255, 185, 177, 172, 255, 191, 191,
+        191, 255, 189, 189, 189, 255, 188, 188, 188, 255, 185, 171, 164, 255, 188, 188, 188, 255,
+        187, 187, 187, 255, 187, 187, 187, 255, 183, 162, 151, 255, 185, 185, 185, 255, 185, 185,
+        185, 255, 183, 183, 183, 255, 184, 176, 171, 255,
+    ];
+
+    // The output of the ISPC is not "stable" and changes based on the width of the vector unit.
+    // For example AVX2 and SSE2 modes gives different modes in a different order! This is simply
+    // because how the work is distributed inside the code and values are then "merged".
+    let expected_modes: [u32; 64] = [
+        1767986251, 1766937674, 1765889097, 1786860233, 1764840520, 1787908298, 1785811912,
+        1788956619, 1763791943, 1784763591, 1783715014, 1762743366, 1805209157, 1782666437,
+        1001542724, 1002591301, 1003639878, 1004688455, 1005736776, 1006784585, 1007832650,
+        1008880459, 1761694789, 1874415205, 1839812181, 1804161860, 1605514315, 1604465738,
+        1603417161, 1624388297, 1602368584, 1625436362, 1623339976, 1626484683, 1873367908,
+        1760646212, 1024611524, 1025659845, 1026707910, 1027756231, 1028804040, 1029852105,
+        1030900426, 1781617860, 1838764884, 1601320007, 1622291655, 1000494147, 1023562947,
+        1820937668, 1600271430, 1621243078, 1890143716, 1042959683, 1962488391, 1642737221,
+        1943090379, 1926313035, 1855540692, 1925264458, 1942041802, 1086999907, 1906920948,
+        1599222853,
+    ];
+
+    let settings = ASTCSettings::alpha_slow(ASTCBlockSize::_4x4);
+    let mut mode_ranker = ModeRankerASTC::new(&settings);
+    let mut pixels = [0.0; 256];
+
+    let mut mode_buffer = [0; 64];
+    mode_ranker.rank(&rgba_data, 0, 0, 16, &mut mode_buffer, &mut pixels);
+
     assert_eq!(expected_modes, mode_buffer)
 }
 
@@ -439,37 +449,29 @@ fn test_compute_metrics() {
 fn test_load_mode_parameters() {
     let packed_mode: u32 = 447488;
 
-    let block = AstcBlock::from_mode_parameters(packed_mode, 4);
+    let mode = AstcMode::from_mode_parameters(packed_mode);
 
-    assert_eq!(block.width, 8);
-    assert_eq!(block.height, 8);
-    assert_eq!(block.dual_plane, 0);
-    assert_eq!(block.weight_range, 0);
-    assert_eq!(block.color_component_selector, 0);
-    assert_eq!(block.partitions, 1);
-    assert_eq!(block.partition_id, 0);
-    assert_eq!(block.color_endpoint_modes[0], 6);
-    assert_eq!(block.color_endpoint_pairs, 2);
-    assert_eq!(block.endpoint_range, 20);
-    assert_eq!(block.channels, 4);
+    assert_eq!(mode.width, 8);
+    assert_eq!(mode.height, 8);
+    assert_eq!(mode.dual_plane, 0);
+    assert_eq!(mode.weight_range, 0);
+    assert_eq!(mode.color_component_selector, 0);
+    assert_eq!(mode.color_endpoint_modes[0], 6);
+    assert_eq!(mode.color_endpoint_pairs, 2);
+    assert_eq!(mode.endpoint_range, 20);
 }
 
 #[test]
 fn test_estimate_error() {
-    let block = AstcBlock {
+    let mode = AstcMode {
         width: 8,
         height: 8,
         dual_plane: 0,
         weight_range: 1,
-        weights: [0; 64],
         color_component_selector: 0,
-        partitions: 1,
-        partition_id: 0,
         color_endpoint_pairs: 0,
-        channels: 4,
-        color_endpoint_modes: [6, 0, 0, 0],
+        color_endpoint_modes: [6, 0],
         endpoint_range: 20,
-        endpoints: [0; 18],
     };
 
     let mut mode_ranker = ModeRankerASTC::new(&ASTCSettings {
@@ -493,6 +495,45 @@ fn test_estimate_error() {
         [1192.6237, 1269.6577, 1419.7146, 1948.0879, 1955.0496],
     ];
 
-    let error = mode_ranker.estimate_error(&block);
+    let error = mode_ranker.estimate_error(&mode);
     assert_eq!(error, 1696.7235);
+}
+
+#[test]
+fn test_compress() {
+    let mode = 1767986251;
+    let pixels: [f32; 256] = [
+        157.0, 158.0, 157.0, 154.0, 0.0, 0.0, 0.0, 0.0, 156.0, 154.0, 153.0, 152.0, 0.0, 0.0, 0.0,
+        0.0, 155.0, 153.0, 150.0, 150.0, 0.0, 0.0, 0.0, 0.0, 157.0, 157.0, 153.0, 150.0, 0.0, 0.0,
+        0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
+        0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 97.0, 97.0,
+        96.0, 95.0, 0.0, 0.0, 0.0, 0.0, 95.0, 93.0, 94.0, 94.0, 0.0, 0.0, 0.0, 0.0, 95.0, 93.0,
+        93.0, 93.0, 0.0, 0.0, 0.0, 0.0, 95.0, 95.0, 93.0, 93.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
+        0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
+        0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 64.0, 63.0, 63.0, 63.0, 0.0, 0.0,
+        0.0, 0.0, 62.0, 61.0, 62.0, 62.0, 0.0, 0.0, 0.0, 0.0, 62.0, 61.0, 62.0, 62.0, 0.0, 0.0,
+        0.0, 0.0, 61.0, 62.0, 61.0, 63.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
+        0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
+        0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 255.0, 255.0, 255.0, 255.0, 0.0, 0.0, 0.0, 0.0, 255.0,
+        255.0, 255.0, 255.0, 0.0, 0.0, 0.0, 0.0, 255.0, 255.0, 255.0, 255.0, 0.0, 0.0, 0.0, 0.0,
+        255.0, 255.0, 255.0, 255.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
+        0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
+        0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
+    ];
+
+    let mut best_score = f32::INFINITY;
+    let mut block_data = [0u8; 16];
+
+    let settings = ASTCSettings::alpha_fast(ASTCBlockSize::_4x4);
+    let compressor = BlockCompressorASTC::new(&settings);
+
+    compressor.compress(&mut block_data, 0, 0, 16, &pixels, mode, &mut best_score);
+
+    let expected_best_score = 30.0;
+    let expected_block_data: [u8; 16] = [
+        51, 2, 251, 219, 5, 245, 126, 122, 192, 204, 90, 156, 241, 82, 238, 255,
+    ];
+
+    assert_eq!(best_score, expected_best_score);
+    assert_eq!(block_data, expected_block_data);
 }

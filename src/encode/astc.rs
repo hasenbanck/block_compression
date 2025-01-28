@@ -7,9 +7,7 @@ use std::f32::consts::PI;
 use bytemuck::{cast_slice, cast_slice_mut};
 pub(crate) use constants::ASTC_MAX_RANKED_MODES;
 
-use self::constants::{
-    ASTC_PACKED_MODES_COUNT, FILTERBANK, FILTER_DATA, PACKED_MODES, RANGE_TABLE,
-};
+use self::constants::{FILTERBANK, FILTER_DATA, PACKED_MODES, RANGE_TABLE};
 use crate::ASTCSettings;
 
 const STRIDE: usize = 8;
@@ -50,10 +48,10 @@ impl PixelSet {
     fn rotate_plane(&mut self, p: usize) {
         for y in 0..self.block_height as usize {
             for x in 0..self.block_width as usize {
-                let mut r = get_pixel(&self.pixels, 0, x, y);
-                let mut g = get_pixel(&self.pixels, 1, x, y);
-                let mut b = get_pixel(&self.pixels, 2, x, y);
-                let mut a = get_pixel(&self.pixels, 3, x, y);
+                let mut r = get_pixel(self.pixels.as_ref(), 0, x, y);
+                let mut g = get_pixel(self.pixels.as_ref(), 1, x, y);
+                let mut b = get_pixel(self.pixels.as_ref(), 2, x, y);
+                let mut a = get_pixel(self.pixels.as_ref(), 3, x, y);
 
                 match p {
                     0 => std::mem::swap(&mut a, &mut r),
@@ -62,14 +60,16 @@ impl PixelSet {
                     _ => {}
                 }
 
-                set_pixel(&mut self.pixels, 0, x, y, r);
-                set_pixel(&mut self.pixels, 1, x, y, g);
-                set_pixel(&mut self.pixels, 2, x, y, b);
-                set_pixel(&mut self.pixels, 3, x, y, a);
+                set_pixel(self.pixels.as_mut(), 0, x, y, r);
+                set_pixel(self.pixels.as_mut(), 1, x, y, g);
+                set_pixel(self.pixels.as_mut(), 2, x, y, b);
+                set_pixel(self.pixels.as_mut(), 3, x, y, a);
             }
         }
     }
 
+    #[allow(clippy::approx_constant)]
+    #[allow(clippy::excessive_precision)]
     fn dct_4(values: &mut [f32], stride: usize) {
         const SCALE: [f32; 2] = [0.5, 0.707106769];
         const C: [f32; 5] = [1.0, 0.923879533, 0.707106769, 0.382683432, 0.0];
@@ -107,6 +107,8 @@ impl PixelSet {
         }
     }
 
+    #[allow(clippy::approx_constant)]
+    #[allow(clippy::excessive_precision)]
     fn dct_6(values: &mut [f32], stride: usize) {
         const SCALE: [f32; 2] = [0.408248290, 0.577350269];
         const C: [f32; 7] = [
@@ -114,7 +116,7 @@ impl PixelSet {
             0.965925813,
             0.866025388,
             0.707106769,
-            0.500000000,
+            0.5,
             0.258819044,
             0.0,
         ];
@@ -224,7 +226,7 @@ impl PixelSet {
             for x in 0..self.block_width as usize {
                 let mut rgba = [0.0f32; 4];
                 for p in 0..channels as usize {
-                    rgba[p] = get_pixel(&self.pixels, p, x, y);
+                    rgba[p] = get_pixel(self.pixels.as_ref(), p, x, y);
                 }
 
                 stats[10] += rgba[0];
@@ -346,6 +348,37 @@ fn set_pixel(pixels: &mut [f32], p: usize, x: usize, y: usize, value: f32) {
     pixels[PITCH * p + STRIDE * y + x] = value;
 }
 
+struct AstcMode {
+    width: u32,
+    height: u32,
+    dual_plane: u8,
+    weight_range: u32,
+    color_component_selector: u32,
+    color_endpoint_pairs: u32,
+    color_endpoint_modes: [u32; 2],
+    endpoint_range: u32,
+}
+
+impl AstcMode {
+    fn from_mode_parameters(packed_mode: u32) -> Self {
+        let mut block = Self {
+            width: 2 + get_bits(packed_mode, 13, 15),
+            height: 2 + get_bits(packed_mode, 16, 18),
+            dual_plane: get_bits(packed_mode, 19, 19) as u8,
+            weight_range: get_bits(packed_mode, 0, 3),
+            color_component_selector: get_bits(packed_mode, 4, 5),
+            color_endpoint_pairs: 0,
+            color_endpoint_modes: [0; 2],
+            endpoint_range: get_bits(packed_mode, 8, 12),
+        };
+
+        block.color_endpoint_modes[0] = get_bits(packed_mode, 6, 7) * 2 + 6;
+        block.color_endpoint_pairs = 1 + (block.color_endpoint_modes[0] / 4);
+
+        block
+    }
+}
+
 struct AstcBlock {
     width: i32,
     height: i32,
@@ -363,26 +396,12 @@ struct AstcBlock {
 }
 
 impl AstcBlock {
-    fn from_mode_ranker(mode_ranker: &ModeRankerASTC) -> Self {
-        Self {
-            width: mode_ranker.settings.block_width as i32,
-            height: mode_ranker.settings.block_height as i32,
-            dual_plane: 0,
-            weight_range: 0,
-            weights: [0; 64],
-            color_component_selector: 0,
-            partitions: 1,
-            partition_id: 0,
-            color_endpoint_pairs: 1,
-            channels: mode_ranker.settings.channels as i32,
-            color_endpoint_modes: [0; 4],
-            endpoint_range: 0,
-            endpoints: [0; 18],
-        }
-    }
+    fn from_packed_mode(packed_mode: u32) -> Self {
+        let color_endpoint_modes0 = (get_bits(packed_mode, 6, 7) * 2 + 6) as i32;
+        let color_endpoint_pairs = 1 + (color_endpoint_modes0 / 4);
+        let channels = if color_endpoint_modes0 > 8 { 4 } else { 3 };
 
-    fn from_mode_parameters(packed_mode: u32, channels: u32) -> Self {
-        let mut block = Self {
+        Self {
             width: 2 + get_bits(packed_mode, 13, 15) as i32,
             height: 2 + get_bits(packed_mode, 16, 18) as i32,
             dual_plane: get_bits(packed_mode, 19, 19) as u8,
@@ -391,17 +410,12 @@ impl AstcBlock {
             color_component_selector: get_bits(packed_mode, 4, 5) as i32,
             partitions: 1,
             partition_id: 0,
-            color_endpoint_pairs: 0,
-            channels: channels as i32,
-            color_endpoint_modes: [0; 4],
+            color_endpoint_pairs,
+            channels,
+            color_endpoint_modes: [color_endpoint_modes0, 0, 0, 0],
             endpoint_range: get_bits(packed_mode, 8, 12) as i32,
             endpoints: [0; 18],
-        };
-
-        block.color_endpoint_modes[0] = (get_bits(packed_mode, 6, 7) * 2 + 6) as i32;
-        block.color_endpoint_pairs = 1 + (block.color_endpoint_modes[0] / 4);
-
-        block
+        }
     }
 
     fn can_store(value: i32, bits: i32) -> bool {
@@ -628,11 +642,11 @@ impl AstcBlock {
         }
     }
 
-    pub(crate) fn pack(&self, data: &mut [u32; 4]) {
-        *data = [0; 4];
+    pub(crate) fn pack(&self) -> [u32; 4] {
+        let mut data = [0; 4];
 
         let mut pos = 0;
-        Self::set_bits(data, &mut pos, 11, self.pack_block_mode() as u32);
+        Self::set_bits(&mut data, &mut pos, 11, self.pack_block_mode() as u32);
 
         let num_weights = self.width * self.height * (if self.dual_plane != 0 { 2 } else { 1 });
         let weight_bits = Self::sequence_bits(num_weights, self.weight_range);
@@ -641,10 +655,10 @@ impl AstcBlock {
         debug_assert!(num_weights <= 64);
         debug_assert!((24..=96).contains(&weight_bits));
 
-        Self::set_bits(data, &mut pos, 2, (self.partitions - 1) as u32);
+        Self::set_bits(&mut data, &mut pos, 2, (self.partitions - 1) as u32);
 
         if self.partitions > 1 {
-            Self::set_bits(data, &mut pos, 10, self.partition_id as u32);
+            Self::set_bits(&mut data, &mut pos, 10, self.partition_id as u32);
 
             let mut min_cem = 16;
             let mut max_cem = 0;
@@ -666,19 +680,24 @@ impl AstcBlock {
                 }
                 extra_bits = 3 * self.partitions - 4;
                 let mut pos2 = 128 - weight_bits - extra_bits;
-                Self::set_bits(data, &mut pos2, extra_bits, (cem >> 6) as u32);
+                Self::set_bits(&mut data, &mut pos2, extra_bits, (cem >> 6) as u32);
             }
 
-            Self::set_bits(data, &mut pos, 6, (cem & 63) as u32);
+            Self::set_bits(&mut data, &mut pos, 6, (cem & 63) as u32);
         } else {
-            Self::set_bits(data, &mut pos, 4, self.color_endpoint_modes[0] as u32);
+            Self::set_bits(&mut data, &mut pos, 4, self.color_endpoint_modes[0] as u32);
         }
 
         if self.dual_plane != 0 {
             debug_assert!(self.partitions < 4);
             extra_bits += 2;
             let mut pos2 = 128 - weight_bits - extra_bits;
-            Self::set_bits(data, &mut pos2, 2, self.color_component_selector as u32);
+            Self::set_bits(
+                &mut data,
+                &mut pos2,
+                2,
+                self.color_component_selector as u32,
+            );
         }
 
         let mut num_cem_pairs = 0;
@@ -706,7 +725,7 @@ impl AstcBlock {
         }
 
         Self::pack_integer_sequence(
-            data,
+            &mut data,
             &self.endpoints,
             pos,
             2 * num_cem_pairs,
@@ -719,6 +738,8 @@ impl AstcBlock {
         for i in 0..4 {
             data[i] |= rdata[3 - i].reverse_bits();
         }
+
+        data
     }
 }
 
@@ -758,18 +779,14 @@ impl<'a> ModeRankerASTC<'a> {
         let width = self.settings.block_width as usize;
         let height = self.settings.block_height as usize;
 
-        let rgba: &[u32] = cast_slice(rgba_data);
-
         for y in 0..height {
             for x in 0..width {
-                let src_idx = ((yy * height + y) * stride + (xx * width + x) * 4) / 4;
-                let rgba_val = rgba[src_idx];
+                let idx = (yy * height + y) * stride + (xx * width + x) * 4;
 
-                pixels[y * STRIDE + x] = ((rgba_val >> 0) & 0xFF) as f32; // R
-                pixels[PITCH + y * STRIDE + x] = ((rgba_val >> 8) & 0xFF) as f32; // G
-                pixels[2 * PITCH + y * STRIDE + x] = ((rgba_val >> 16) & 0xFF) as f32; // B
-                pixels[3 * PITCH + y * STRIDE + x] = ((rgba_val >> 24) & 0xFF) as f32;
-                // A
+                pixels[y * STRIDE + x] = rgba_data[idx] as f32;
+                pixels[PITCH + y * STRIDE + x] = rgba_data[idx + 1] as f32;
+                pixels[2 * PITCH + y * STRIDE + x] = rgba_data[idx + 2] as f32;
+                pixels[3 * PITCH + y * STRIDE + x] = rgba_data[idx + 3] as f32;
             }
         }
     }
@@ -810,7 +827,7 @@ impl<'a> ModeRankerASTC<'a> {
             for x in 0..block.block_width as usize {
                 let mut proj = 0.0f32;
                 for p in 0..channels as usize {
-                    proj += (get_pixel(&block.pixels, p, x, y) - dc[p]) * dir[p];
+                    proj += (get_pixel(block.pixels.as_ref(), p, x, y) - dc[p]) * dir[p];
                 }
 
                 ext[0] = ext[0].min(proj);
@@ -860,17 +877,18 @@ impl<'a> ModeRankerASTC<'a> {
                 for x in 0..self.settings.block_width as usize {
                     let mut pixel = [0.0f32; 4];
                     for p in 0..4 {
-                        pixel[p] = get_pixel(&pset.pixels, p, x, y) - base[p];
+                        pixel[p] = get_pixel(pset.pixels.as_ref(), p, x, y) - base[p];
                     }
                     let proj = dot4(&pixel, &dir) / sq_norm;
 
                     for p in 0..3 {
                         pca_error +=
-                            sq(get_pixel(&pset.pixels, p, x, y) - (proj * dir[p] + base[p]));
+                            sq(get_pixel(pset.pixels.as_ref(), p, x, y)
+                                - (proj * dir[p] + base[p]));
                     }
                     pca_alpha_error +=
-                        sq(get_pixel(&pset.pixels, 3, x, y) - (proj * dir[3] + base[3]));
-                    alpha_error += sq(get_pixel(&pset.pixels, 3, x, y) - 255.0);
+                        sq(get_pixel(pset.pixels.as_ref(), 3, x, y) - (proj * dir[3] + base[3]));
+                    alpha_error += sq(get_pixel(pset.pixels.as_ref(), 3, x, y) - 255.0);
                 }
             }
 
@@ -904,24 +922,22 @@ impl<'a> ModeRankerASTC<'a> {
                     for x in 0..self.settings.block_width as usize {
                         let mut pixel = [0.0f32; 3];
                         for p in 0..3 {
-                            pixel[p] = get_pixel(&pset.pixels, p, x, y) - base[p];
+                            pixel[p] = get_pixel(pset.pixels.as_ref(), p, x, y) - base[p];
                         }
                         let proj = dot3(&pixel, &dir) / sq_norm;
 
                         for p in 0..3 {
                             if p == c - 1 {
-                                pca_alpha_error +=
-                                    sq(get_pixel(&pset.pixels, p, x, y)
-                                        - (proj * dir[p] + base[p]));
-                                alpha_error += sq(get_pixel(&pset.pixels, p, x, y) - 255.0);
+                                pca_alpha_error += sq(get_pixel(pset.pixels.as_ref(), p, x, y)
+                                    - (proj * dir[p] + base[p]));
+                                alpha_error += sq(get_pixel(pset.pixels.as_ref(), p, x, y) - 255.0);
                             } else {
-                                pca_error +=
-                                    sq(get_pixel(&pset.pixels, p, x, y)
-                                        - (proj * dir[p] + base[p]));
+                                pca_error += sq(get_pixel(pset.pixels.as_ref(), p, x, y)
+                                    - (proj * dir[p] + base[p]));
                             }
                         }
 
-                        let value = get_pixel(&pset.pixels, 3, x, y);
+                        let value = get_pixel(pset.pixels.as_ref(), 3, x, y);
                         ext[0] = ext[0].min(value);
                         ext[1] = ext[1].max(value);
                     }
@@ -959,7 +975,7 @@ impl<'a> ModeRankerASTC<'a> {
         }
     }
 
-    fn get_sq_rcp_levels(range: i32) -> f32 {
+    fn get_sq_rcp_levels(range: u32) -> f32 {
         static TABLE: &[f32; 21] = &[
             1.000000, 0.250000, 0.111111, 0.062500, 0.040000, 0.020408, 0.012346, 0.008264,
             0.004444, 0.002770, 0.001890, 0.001041, 0.000657, 0.000453, 0.000252, 0.000160,
@@ -969,27 +985,27 @@ impl<'a> ModeRankerASTC<'a> {
         TABLE[range as usize]
     }
 
-    fn estimate_error(&self, block: &AstcBlock) -> f32 {
-        let c = if block.dual_plane != 0 {
-            1 + block.color_component_selector as usize
+    fn estimate_error(&self, mode: &AstcMode) -> f32 {
+        let c = if mode.dual_plane != 0 {
+            1 + mode.color_component_selector as usize
         } else {
             0
         };
 
-        let scale_error = self.scale_error[(block.height - 2) as usize][(block.width - 2) as usize];
+        let scale_error = self.scale_error[(mode.height - 2) as usize][(mode.width - 2) as usize];
 
-        let zero_based = (block.color_endpoint_modes[0] % 4) == 2;
+        let zero_based = (mode.color_endpoint_modes[0] % 4) == 2;
         let zero_idx = zero_based as usize;
 
         let mut pca_error = self.pca_error[zero_idx][c];
         let sq_norm = self.sq_norm[zero_idx][c];
 
-        if block.color_endpoint_modes[0] <= 8 {
+        if mode.color_endpoint_modes[0] <= 8 {
             pca_error += self.alpha_error[zero_idx][c];
         }
 
-        let sq_rcp_w_levels = Self::get_sq_rcp_levels(block.weight_range);
-        let sq_rcp_ep_levels = Self::get_sq_rcp_levels(block.endpoint_range);
+        let sq_rcp_w_levels = Self::get_sq_rcp_levels(mode.weight_range);
+        let sq_rcp_ep_levels = Self::get_sq_rcp_levels(mode.endpoint_range);
 
         let mut quant_error = 0.0;
         quant_error += 2.0 * sq_norm * sq_rcp_w_levels;
@@ -1033,32 +1049,32 @@ impl<'a> ModeRankerASTC<'a> {
         self.compute_metrics(pixels);
 
         let mut threshold_error = 0.0f32;
-        let mut count = -1;
+        let mut count = 0;
 
         for &packed_mode in PACKED_MODES.iter() {
-            // TODO: NHA The original code did use another "astc_mode" struct and not a block. Important?!
-            let block = AstcBlock::from_mode_parameters(packed_mode, self.settings.channels);
+            let mode = AstcMode::from_mode_parameters(packed_mode);
 
-            if block.height > self.settings.block_height as i32
-                || block.width > self.settings.block_width as i32
-                || (self.settings.channels == 3 && block.color_endpoint_modes[0] > 8)
+            if mode.height > self.settings.block_height
+                || mode.width > self.settings.block_width
+                || (self.settings.channels == 3 && mode.color_endpoint_modes[0] > 8)
             {
                 continue;
             }
 
-            let error = self.estimate_error(&block);
-            count += 1;
+            let error = self.estimate_error(&mode);
 
-            if count < self.settings.fast_skip_threshold as i32 {
-                self.best_modes[count as usize] = packed_mode;
-                self.best_scores[count as usize] = error;
+            if count < self.settings.fast_skip_threshold as usize {
+                self.best_modes[count] = packed_mode;
+                self.best_scores[count] = error;
                 threshold_error = f32::max(threshold_error, error);
             } else if error < threshold_error {
                 self.insert_element(error, packed_mode, &mut threshold_error);
             }
+
+            count += 1;
         }
 
-        debug_assert!(count >= 0);
+        debug_assert!(count > 0);
 
         mode_buffer[..(self.settings.fast_skip_threshold as usize)]
             .copy_from_slice(&self.best_modes[..(self.settings.fast_skip_threshold as usize)]);
@@ -1066,45 +1082,118 @@ impl<'a> ModeRankerASTC<'a> {
 }
 
 pub(crate) struct BlockCompressorASTC<'a> {
-    width: u32,
-    height: u32,
-    dual_plane: u32,
-    partitions: u32,
-    color_endpoint_pairs: u32,
-    channels: u32,
     settings: &'a ASTCSettings,
 }
 
 impl<'a> BlockCompressorASTC<'a> {
-    pub(crate) fn new(mode: u32, settings: &'a ASTCSettings) -> Self {
-        let width = 2 + get_field(mode, 15, 13); // 2..8
-        let height = 2 + get_field(mode, 18, 16); // 2..8
-        let dual_plane = get_field(mode, 19, 19); // 0 or 1
-        let color_endpoint_modes0 = get_field(mode, 7, 6) * 2 + 6; // 6, 8, 10 or 12
-        let color_endpoint_pairs = 1 + (color_endpoint_modes0 / 4);
-        let channels = if color_endpoint_modes0 > 8 { 4 } else { 3 };
-
-        Self {
-            width,
-            height,
-            dual_plane,
-            partitions: 1,
-            color_endpoint_pairs,
-            channels,
-            settings,
-        }
+    pub(crate) fn new(settings: &'a ASTCSettings) -> Self {
+        Self { settings }
     }
 
+    // TODO Triple check
+    fn scale_pixels(&self, pixels: &[f32; 256], block: &AstcBlock) -> [f32; 256] {
+        let compressor_width = self.settings.block_width as usize;
+        let compressor_height = self.settings.block_height as usize;
+        let block_width = block.width as usize;
+        let block_height = block.height as usize;
+        let channels = block.channels as usize;
+
+        let mut scaled_pixels = [0.0f32; 256];
+
+        let y_filter = &FILTER_DATA[FILTERBANK[compressor_height - 4][block_height - 2]..];
+        let x_filter = &FILTER_DATA[FILTERBANK[compressor_width - 4][block_width - 2]..];
+
+        // Process each line
+        for y in 0..block_height {
+            let mut line = [[0.0f32; 4]; 8];
+
+            // Process vertical scaling
+            if compressor_height == block_height {
+                // Direct copy if heights match
+                for x in 0..compressor_width {
+                    for p in 0..channels {
+                        line[x][p] = get_pixel(pixels, p, x, y);
+                    }
+                }
+            } else {
+                // Apply vertical filtering
+                for x in 0..compressor_width {
+                    for k in 0..compressor_height {
+                        for p in 0..channels {
+                            line[x][p] +=
+                                y_filter[k * block_height + y] * get_pixel(pixels, p, x, k);
+                        }
+                    }
+                }
+            }
+
+            // Process horizontal scaling
+            if compressor_width == block_width {
+                // Direct copy if widths match
+                for x in 0..block_width {
+                    for p in 0..channels {
+                        set_pixel(&mut scaled_pixels, p, x, y, line[x][p].clamp(0.0, 255.0));
+                    }
+                }
+            } else {
+                // Apply horizontal filtering
+                for x in 0..block_width {
+                    let mut value = [0.0f32; 4];
+
+                    for k in 0..compressor_width {
+                        for p in 0..channels {
+                            value[p] += x_filter[k * block_width + x] * line[k][p];
+                        }
+                    }
+
+                    for p in 0..channels {
+                        set_pixel(&mut scaled_pixels, p, x, y, value[p].clamp(0.0, 255.0));
+                    }
+                }
+            }
+        }
+
+        scaled_pixels
+    }
+
+    #[allow(clippy::too_many_arguments)]
     pub(crate) fn compress(
         &self,
-        rgba_data: &[u8],
         blocks_buffer: &mut [u8],
         xx: usize,
         yy: usize,
-        stride: usize,
-        best_score: &mut f32,
+        block_width: usize,
         pixels: &[f32; 256],
+        packed_mode: u32,
+        best_score: &mut f32,
     ) {
-        todo!()
+        let block = AstcBlock::from_packed_mode(packed_mode);
+
+        let scaled_pixels = self.scale_pixels(pixels, &block);
+
+        let mut scaled_pixels = PixelSet {
+            pixels: scaled_pixels,
+            block_width: block.width,
+            block_height: block.height,
+        };
+
+        if block.dual_plane != 0 {
+            scaled_pixels.rotate_plane(block.color_component_selector as usize);
+        }
+
+        // TODO
+        //block.optimize_block(scaled_pixels, self.settings.refine_iterations);
+        //let error = self.measure_error(block, pixels);
+        let error = 0.0;
+
+        if error < *best_score {
+            *best_score = error;
+
+            let block_data = block.pack();
+
+            let offset = (yy * block_width + xx) * 16;
+            let data: &[u8] = cast_slice(&block_data[..]);
+            blocks_buffer[offset..offset + 16].copy_from_slice(data);
+        }
     }
 }
