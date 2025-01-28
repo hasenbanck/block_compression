@@ -299,17 +299,17 @@ pub fn compress_astc(
             let mut best_score = f32::INFINITY;
 
             for i in 0..settings.fast_skip_threshold as usize {
-                let mode = ranked_modes[i];
+                let packed_mode = ranked_modes[i];
 
-                let block_compressor = BlockCompressorASTC::new(mode, settings);
+                let block_compressor = BlockCompressorASTC::new(settings);
                 block_compressor.compress(
-                    rgba_data,
                     blocks_buffer,
                     xx,
                     yy,
-                    stride,
-                    &mut best_score,
+                    block_width,
                     &pixels,
+                    packed_mode,
+                    &mut best_score,
                 );
             }
         }
