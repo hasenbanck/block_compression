@@ -27,6 +27,8 @@ bc6h = ["half"]
 bc7 = []
 
 [dependencies]
+# TODO remove once BC6H is fixed
+intel_tex_2 = "0.4"
 bytemuck = { workspace = true, features = ["derive"] }
 half = { workspace = true, optional = true, features = ["bytemuck"] }
 wgpu = { workspace = true, optional = true }

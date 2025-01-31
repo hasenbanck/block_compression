@@ -8,6 +8,7 @@ use self::common::{
     create_blocks_buffer, create_wgpu_resources, download_blocks_data,
     read_image_and_create_texture, srgb_to_linear, BRICK_FILE_PATH, MARBLE_FILE_PATH,
 };
+use crate::common::BLENDER_FILE_PATH;
 
 mod common;
 
@@ -142,10 +143,42 @@ fn compress_image_reference(
     height: u32,
     data: &[u8],
 ) -> Vec<u8> {
-    let output_size = variant.blocks_byte_size(width, height);
-    let mut blocks = vec![0; output_size];
-    compress_rgba8(variant, data, &mut blocks, width, height, width * 4);
-    blocks
+    match variant {
+        CompressionVariant::BC6H(setting) => {
+            let rgba_f16_data: Vec<u8> = data
+                .iter()
+                .flat_map(|c| half::f16::from_f32(srgb_to_linear(*c) as f32).to_le_bytes())
+                .collect();
+
+            let surface = intel_tex_2::RgbaSurface {
+                width,
+                height,
+                stride: width * 4 * size_of::<half::f16>() as u32,
+                data: &rgba_f16_data,
+            };
+
+            let setting = match &setting {
+                _ if setting == BC6HSettings::very_fast() => {
+                    intel_tex_2::bc6h::very_fast_settings()
+                }
+                _ if setting == BC6HSettings::fast() => intel_tex_2::bc6h::very_settings(),
+                _ if setting == BC6HSettings::basic() => intel_tex_2::bc6h::basic_settings(),
+                _ if setting == BC6HSettings::slow() => intel_tex_2::bc6h::slow_settings(),
+                _ if setting == BC6HSettings::very_slow() => {
+                    intel_tex_2::bc6h::very_slow_settings()
+                }
+                _ => panic!("Unknown BC6H setting"),
+            };
+
+            intel_tex_2::bc6h::compress_blocks(&setting, &surface)
+        }
+        _ => {
+            let output_size = variant.blocks_byte_size(width, height);
+            let mut blocks = vec![0; output_size];
+            compress_rgba8(variant, data, &mut blocks, width, height, width * 4);
+            blocks
+        }
+    }
 }
 
 fn compress_image(image_path: &str, variant: CompressionVariant) -> (u32, u32, Vec<u8>, Vec<u8>) {
@@ -254,6 +287,7 @@ fn compare_psnr(image_path: &str, variant: CompressionVariant, channels: u32) {
 fn psnr_bc1() {
     compare_psnr(BRICK_FILE_PATH, CompressionVariant::BC1, 3);
     compare_psnr(MARBLE_FILE_PATH, CompressionVariant::BC1, 3);
+    compare_psnr(BLENDER_FILE_PATH, CompressionVariant::BC1, 3);
 }
 
 #[test]
@@ -264,13 +298,18 @@ fn psnr_bc3() {
 
 #[test]
 fn psnr_bc6h_very_fast() {
+    // compare_psnr(
+    //     BRICK_FILE_PATH,
+    //     CompressionVariant::BC6H(BC6HSettings::very_fast()),
+    //     3,
+    // );
+    // compare_psnr(
+    //     MARBLE_FILE_PATH,
+    //     CompressionVariant::BC6H(BC6HSettings::very_fast()),
+    //     3,
+    // );
     compare_psnr(
-        BRICK_FILE_PATH,
-        CompressionVariant::BC6H(BC6HSettings::very_fast()),
-        3,
-    );
-    compare_psnr(
-        MARBLE_FILE_PATH,
+        BLENDER_FILE_PATH,
         CompressionVariant::BC6H(BC6HSettings::very_fast()),
         3,
     );
@@ -288,6 +327,11 @@ fn psnr_bc6h_fast() {
         CompressionVariant::BC6H(BC6HSettings::fast()),
         3,
     );
+    compare_psnr(
+        BLENDER_FILE_PATH,
+        CompressionVariant::BC6H(BC6HSettings::fast()),
+        3,
+    );
 }
 
 #[test]
@@ -299,6 +343,11 @@ fn psnr_bc6h_basic() {
     );
     compare_psnr(
         MARBLE_FILE_PATH,
+        CompressionVariant::BC6H(BC6HSettings::basic()),
+        3,
+    );
+    compare_psnr(
+        BLENDER_FILE_PATH,
         CompressionVariant::BC6H(BC6HSettings::basic()),
         3,
     );
@@ -316,6 +365,11 @@ fn psnr_bc6h_slow() {
         CompressionVariant::BC6H(BC6HSettings::slow()),
         3,
     );
+    compare_psnr(
+        BLENDER_FILE_PATH,
+        CompressionVariant::BC6H(BC6HSettings::slow()),
+        3,
+    );
 }
 
 #[test]
@@ -327,6 +381,11 @@ fn psnr_bc6h_very_slow() {
     );
     compare_psnr(
         MARBLE_FILE_PATH,
+        CompressionVariant::BC6H(BC6HSettings::very_slow()),
+        3,
+    );
+    compare_psnr(
+        BLENDER_FILE_PATH,
         CompressionVariant::BC6H(BC6HSettings::very_slow()),
         3,
     );
@@ -414,6 +473,11 @@ fn psnr_bc7_opaque_ultra_fast() {
         CompressionVariant::BC7(BC7Settings::opaque_ultra_fast()),
         3,
     );
+    compare_psnr(
+        BLENDER_FILE_PATH,
+        CompressionVariant::BC7(BC7Settings::opaque_ultra_fast()),
+        3,
+    );
 }
 
 #[test]
@@ -425,6 +489,11 @@ fn psnr_bc7_opaque_very_fast() {
     );
     compare_psnr(
         MARBLE_FILE_PATH,
+        CompressionVariant::BC7(BC7Settings::opaque_very_fast()),
+        3,
+    );
+    compare_psnr(
+        BLENDER_FILE_PATH,
         CompressionVariant::BC7(BC7Settings::opaque_very_fast()),
         3,
     );
@@ -442,6 +511,11 @@ fn psnr_bc7_opaque_fast() {
         CompressionVariant::BC7(BC7Settings::opaque_fast()),
         3,
     );
+    compare_psnr(
+        BLENDER_FILE_PATH,
+        CompressionVariant::BC7(BC7Settings::opaque_fast()),
+        3,
+    );
 }
 
 #[test]
@@ -456,6 +530,11 @@ fn psnr_bc7_opaque_basic() {
         CompressionVariant::BC7(BC7Settings::opaque_basic()),
         3,
     );
+    compare_psnr(
+        BLENDER_FILE_PATH,
+        CompressionVariant::BC7(BC7Settings::opaque_basic()),
+        3,
+    );
 }
 
 #[test]
@@ -467,6 +546,11 @@ fn psnr_bc7_opaque_slow() {
     );
     compare_psnr(
         MARBLE_FILE_PATH,
+        CompressionVariant::BC7(BC7Settings::opaque_slow()),
+        3,
+    );
+    compare_psnr(
+        BLENDER_FILE_PATH,
         CompressionVariant::BC7(BC7Settings::opaque_slow()),
         3,
     );

@@ -25,6 +25,7 @@ pub fn srgb_to_linear(srgb: u8) -> f64 {
 
 pub const BRICK_FILE_PATH: &str = "tests/images/brick.png";
 pub const MARBLE_FILE_PATH: &str = "tests/images/marble.png";
+pub const BLENDER_FILE_PATH: &str = "tests/images/blender.png";
 
 pub fn create_wgpu_resources() -> (Arc<Device>, Arc<Queue>) {
     static CACHE: LazyLock<(Arc<Device>, Arc<Queue>)> = LazyLock::new(|| {
