@@ -11,10 +11,10 @@ use wgpu::{
     util::{DeviceExt, TextureDataOrder},
     BackendOptions, Backends, Buffer, BufferDescriptor, BufferUsages, CommandEncoderDescriptor,
     ComputePassDescriptor, ComputePassTimestampWrites, Device, DeviceDescriptor,
-    Dx12BackendOptions, Dx12Compiler, Error, Extent3d, Features, GlBackendOptions,
-    Gles3MinorVersion, Instance, InstanceDescriptor, InstanceFlags, Maintain, MapMode, MemoryHints,
+    Dx12BackendOptions, Dx12Compiler, Error, Extent3d, Features, GlBackendOptions, Instance,
+    InstanceDescriptor, InstanceFlags, MapMode, MemoryHints, NoopBackendOptions, PollType,
     PowerPreference, QueryType, Queue, Texture, TextureDescriptor, TextureDimension, TextureFormat,
-    TextureUsages, TextureViewDescriptor,
+    TextureUsages, TextureViewDescriptor, Trace,
 };
 
 fn main() {
@@ -84,13 +84,12 @@ fn create_resources() -> (Arc<Device>, Arc<Queue>) {
         backends: Backends::from_env().unwrap_or_default(),
         flags: InstanceFlags::from_build_config().with_env(),
         backend_options: BackendOptions {
-            gl: GlBackendOptions {
-                gles_minor_version: Gles3MinorVersion::Version1,
-            },
+            gl: GlBackendOptions::default(),
             dx12: Dx12BackendOptions {
                 shader_compiler: Dx12Compiler::StaticDxc,
             }
             .with_env(),
+            noop: NoopBackendOptions::default(),
         },
     });
 
@@ -101,15 +100,13 @@ fn create_resources() -> (Arc<Device>, Arc<Queue>) {
     }))
     .expect("Failed to find an appropriate adapter");
 
-    let (device, queue) = block_on(adapter.request_device(
-        &DeviceDescriptor {
-            label: Some("main device"),
-            required_features: Features::TIMESTAMP_QUERY,
-            required_limits: adapter.limits(),
-            memory_hints: MemoryHints::MemoryUsage,
-        },
-        None,
-    ))
+    let (device, queue) = block_on(adapter.request_device(&DeviceDescriptor {
+        label: Some("main device"),
+        required_features: Features::TIMESTAMP_QUERY,
+        required_limits: adapter.limits(),
+        memory_hints: MemoryHints::MemoryUsage,
+        trace: Trace::Off,
+    }))
     .expect("Failed to create device");
     device.on_uncaptured_error(Box::new(error_handler));
 
@@ -248,7 +245,7 @@ fn compress(compressor: &mut GpuBlockCompressor, device: &Device, queue: &Queue)
         let (tx, rx) = std::sync::mpsc::channel();
         buffer_slice.map_async(MapMode::Read, move |v| tx.send(v).unwrap());
 
-        device.poll(Maintain::Wait);
+        let _ = device.poll(PollType::Wait);
 
         match rx.recv() {
             Ok(Ok(())) => {
@@ -295,7 +292,7 @@ fn download_blocks_data(device: &Device, queue: &Queue, block_buffer: Buffer) ->
         let (tx, rx) = std::sync::mpsc::channel();
         buffer_slice.map_async(MapMode::Read, move |v| tx.send(v).unwrap());
 
-        device.poll(Maintain::Wait);
+        let _ = device.poll(PollType::Wait);
 
         match rx.recv() {
             Ok(Ok(())) => {
