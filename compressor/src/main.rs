@@ -1,4 +1,4 @@
-use std::{fs::File, path::PathBuf, sync::Arc, time::Instant};
+use std::{fs::File, path::PathBuf, time::Instant};
 
 use block_compression::{
     half::f16, BC6HSettings, BC7Settings, CompressionVariant, GpuBlockCompressor,
@@ -79,7 +79,7 @@ fn main() {
     );
 }
 
-fn create_resources() -> (Arc<Device>, Arc<Queue>) {
+fn create_resources() -> (Device, Queue) {
     let instance = Instance::new(&InstanceDescriptor {
         backends: Backends::from_env().unwrap_or_default(),
         flags: InstanceFlags::from_build_config().with_env(),
@@ -113,7 +113,7 @@ fn create_resources() -> (Arc<Device>, Arc<Queue>) {
     let info = adapter.get_info();
     println!("Using backend: {:?}", info.backend);
 
-    (Arc::new(device), Arc::new(queue))
+    (device, queue)
 }
 
 fn read_image_and_create_texture(

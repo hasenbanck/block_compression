@@ -1,4 +1,4 @@
-use std::sync::{Arc, LazyLock};
+use std::sync::LazyLock;
 
 use block_compression::CompressionVariant;
 use half::f16;
@@ -26,8 +26,8 @@ pub fn srgb_to_linear(srgb: u8) -> f64 {
 pub const BRICK_FILE_PATH: &str = "tests/images/brick.png";
 pub const MARBLE_FILE_PATH: &str = "tests/images/marble.png";
 
-pub fn create_wgpu_resources() -> (Arc<Device>, Arc<Queue>) {
-    static CACHE: LazyLock<(Arc<Device>, Arc<Queue>)> = LazyLock::new(|| {
+pub fn create_wgpu_resources() -> (Device, Queue) {
+    static CACHE: LazyLock<(Device, Queue)> = LazyLock::new(|| {
         let instance = Instance::new(&InstanceDescriptor {
             backends: Backends::from_env().unwrap_or_default(),
             flags: InstanceFlags::from_build_config().with_env(),
@@ -57,7 +57,7 @@ pub fn create_wgpu_resources() -> (Arc<Device>, Arc<Queue>) {
         .expect("Failed to create device");
         device.on_uncaptured_error(Box::new(error_handler));
 
-        (Arc::new(device), Arc::new(queue))
+        (device, queue)
     });
 
     CACHE.clone()
