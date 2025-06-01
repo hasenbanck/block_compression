@@ -6,7 +6,8 @@ use wgpu::{
     BindGroupLayoutDescriptor, BindGroupLayoutEntry, BindingResource, BindingType, Buffer,
     BufferBinding, BufferBindingType, BufferDescriptor, BufferUsages, ComputePass, ComputePipeline,
     ComputePipelineDescriptor, Device, PipelineCompilationOptions, PipelineLayoutDescriptor, Queue,
-    ShaderModule, ShaderStages, TextureSampleType, TextureView, TextureViewDimension,
+    ShaderModule, ShaderRuntimeChecks, ShaderStages, TextureSampleType, TextureView,
+    TextureViewDimension,
 };
 
 #[cfg(feature = "bc6h")]
@@ -89,8 +90,18 @@ impl GpuBlockCompressor {
             device.create_shader_module(include_wgsl!("shader/bc1_to_5.wgsl"));
         #[cfg(feature = "bc6h")]
         let shader_module_bc6h = device.create_shader_module(include_wgsl!("shader/bc6h.wgsl"));
+        // The addition of the bounded loop in https://github.com/gfx-rs/wgpu/pull/7080
+        // seems to cause the program to crash with AMD integrated GPU.
         #[cfg(feature = "bc7")]
-        let shader_module_bc7 = device.create_shader_module(include_wgsl!("shader/bc7.wgsl"));
+        let shader_module_bc7 = {
+            unsafe {
+                let checks = ShaderRuntimeChecks {
+                    bounds_checks: true,
+                    force_loop_bounding: false,
+                };
+                device.create_shader_module_trusted(include_wgsl!("shader/bc7.wgsl"), checks)
+            }
+        };
 
         let uniforms_buffer = device.create_buffer(&BufferDescriptor {
             label: Some("uniforms"),
