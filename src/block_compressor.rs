@@ -1,4 +1,4 @@
-use std::{collections::HashMap, num::NonZeroU64, sync::Arc};
+use std::{collections::HashMap, num::NonZeroU64};
 
 use bytemuck::{cast_slice, Pod, Zeroable};
 use wgpu::{
@@ -52,8 +52,8 @@ pub struct GpuBlockCompressor {
     bc7_settings_buffer: Buffer,
     bind_group_layouts: HashMap<CompressionVariant, BindGroupLayout>,
     pipelines: HashMap<CompressionVariant, ComputePipeline>,
-    device: Arc<Device>,
-    queue: Arc<Queue>,
+    device: Device,
+    queue: Queue,
     uniforms_aligned_size: usize,
     #[cfg(feature = "bc6h")]
     bc6h_aligned_size: usize,
@@ -63,7 +63,10 @@ pub struct GpuBlockCompressor {
 
 impl GpuBlockCompressor {
     /// Creates a new block compressor instance.
-    pub fn new(device: Arc<Device>, queue: Arc<Queue>) -> Self {
+    ///
+    /// [`wgpu::Device`] and [`wgpu::Queue`] are internally reference counted and can cheaply and
+    /// safely be cloned.
+    pub fn new(device: Device, queue: Queue) -> Self {
         let limits = device.limits();
 
         let alignment = limits.min_uniform_buffer_offset_alignment as usize;
