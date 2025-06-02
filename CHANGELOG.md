@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/)
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.0] - unreleased
+
+### Changed
+
+- `GpuBlockCompressor::new()` takes the WGPU device and queue directly without an Arc wrapped around it. WGPU 25
+  made the main structures clonable, since they are internally reference counted, so it's not needed anymore to wrap
+  them in a smart pointer anymore.
+
 ## [0.4.0] - 2025-04-11
 
 ### Updated
