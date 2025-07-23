@@ -115,7 +115,7 @@ pub fn calculate_image_metrics_rgba8(
 
 fn print_metrics(name: &str, metrics: &PsnrResult) {
     println!("-----------------------");
-    println!("Image name: {}", name);
+    println!("Image name: {name}");
     println!("Overall PSNR: {:.4} dB", metrics.overall_psnr);
     println!("Overall MSE: {:.9}", metrics.overall_mse);
     println!(

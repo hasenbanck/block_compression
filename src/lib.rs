@@ -127,7 +127,7 @@ impl CompressionVariant {
     /// which is then multiplied by the block size.
     /// Width is rounded up to the nearest multiple of 4.
     pub const fn bytes_per_row(self, width: u32) -> u32 {
-        let blocks_per_row = (width + 3) / 4;
+        let blocks_per_row = width.div_ceil(4);
         blocks_per_row * self.block_byte_size()
     }
 
@@ -136,8 +136,8 @@ impl CompressionVariant {
     /// The size is calculated based on the block compression format and rounded up dimensions.
     /// Width and height are rounded up to the nearest multiple of 4.
     pub const fn blocks_byte_size(self, width: u32, height: u32) -> usize {
-        let block_width = (width as usize + 3) / 4;
-        let block_height = (height as usize + 3) / 4;
+        let block_width = (width as usize).div_ceil(4);
+        let block_height = (height as usize).div_ceil(4);
         let block_count = block_width * block_height;
         let block_size = self.block_byte_size() as usize;
         block_count * block_size

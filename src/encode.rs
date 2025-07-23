@@ -48,7 +48,7 @@ use crate::CompressionVariant;
 /// * `width` - Width of the image in pixels
 /// * `height` - Height of the image in pixels
 /// * `stride` - Number of bytes per row in the source data (for padding).
-///              Must be `width * 4` for tightly packed RGBA data.
+///   Must be `width * 4` for tightly packed RGBA data.
 ///
 /// # Panics
 /// * If `width` or `height` is not a multiple of 4
@@ -101,8 +101,8 @@ pub fn compress_rgba8(
     );
 
     let stride = stride as usize;
-    let block_width = (width as usize + 3) / 4;
-    let block_height = (height as usize + 3) / 4;
+    let block_width = (width as usize).div_ceil(4);
+    let block_height = (height as usize).div_ceil(4);
 
     match variation {
         #[cfg(feature = "bc15")]
@@ -176,7 +176,7 @@ pub fn compress_rgba8(
 /// * `width` - Width of the image in pixels
 /// * `height` - Height of the image in pixels
 /// * `stride` - Number of half-float elements per row in the source data (for padding).
-///              Must be `width * 4` for tightly packed RGBA data.
+///   Must be `width * 4` for tightly packed RGBA data.
 ///
 /// # Panics
 /// * If `width` or `height` is not a multiple of 4
@@ -229,8 +229,8 @@ pub fn compress_rgba16(
     );
 
     let stride = stride as usize;
-    let block_width = (width as usize + 3) / 4;
-    let block_height = (height as usize + 3) / 4;
+    let block_width = (width as usize).div_ceil(4);
+    let block_height = (height as usize).div_ceil(4);
 
     match variation {
         CompressionVariant::BC6H(settings) => {

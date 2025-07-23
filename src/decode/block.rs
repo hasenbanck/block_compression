@@ -1422,9 +1422,7 @@ mod tests {
             assert_eq!(
                 &decoded[start..end],
                 &expected_output[start..end],
-                "{}: Mismatch at row {}",
-                name,
-                y
+                "{name}: Mismatch at row {y}",
             );
         }
     }

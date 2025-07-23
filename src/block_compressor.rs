@@ -593,11 +593,11 @@ impl GpuBlockCompressor {
                 }
             }
 
-            let block_width = (task.width + 3) / 4;
-            let block_height = (task.height + 3) / 4;
+            let block_width = task.width.div_ceil(4);
+            let block_height = task.height.div_ceil(4);
 
-            let workgroup_width = (block_width + 7) / 8;
-            let workgroup_height = (block_height + 7) / 8;
+            let workgroup_width = block_width.div_ceil(8);
+            let workgroup_height = block_height.div_ceil(8);
 
             pass.dispatch_workgroups(workgroup_width, workgroup_height, 1);
         }

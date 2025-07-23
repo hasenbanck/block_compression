@@ -204,8 +204,8 @@ fn decompress_rgba8<D: BlockRgba8Decoder>(
     blocks_data: &[u8],
     rgba_data: &mut [u8],
 ) {
-    let blocks_x = (width + 3) / 4;
-    let blocks_y = (height + 3) / 4;
+    let blocks_x = width.div_ceil(4);
+    let blocks_y = height.div_ceil(4);
     let block_byte_size = D::block_byte_size() as usize;
     let output_row_pitch = width as usize * 4; // Always RGBA
 
@@ -250,8 +250,8 @@ fn decompress_rgba16f<D: BlockRgba16fDecoder>(
     blocks_data: &[u8],
     rgba_data: &mut [half::f16],
 ) {
-    let blocks_x = (width + 3) / 4;
-    let blocks_y = (height + 3) / 4;
+    let blocks_x = width.div_ceil(4);
+    let blocks_y = height.div_ceil(4);
     let block_byte_size = D::block_byte_size() as usize;
     let output_row_pitch = width as usize * 4; // Always RGBA16f
 
@@ -296,8 +296,8 @@ fn decompress_rgba32f<D: BlockRgba32fDecoder>(
     blocks_data: &[u8],
     rgba_data: &mut [f32],
 ) {
-    let blocks_x = (width + 3) / 4;
-    let blocks_y = (height + 3) / 4;
+    let blocks_x = width.div_ceil(4);
+    let blocks_y = height.div_ceil(4);
     let block_byte_size = D::block_byte_size() as usize;
     let output_row_pitch = width as usize * 4; // Always RGBA32f
 

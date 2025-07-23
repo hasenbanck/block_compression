@@ -31,6 +31,7 @@ pub fn create_wgpu_resources() -> (Device, Queue) {
         let instance = Instance::new(&InstanceDescriptor {
             backends: Backends::from_env().unwrap_or_default(),
             flags: InstanceFlags::from_build_config().with_env(),
+            memory_budget_thresholds: Default::default(),
             backend_options: BackendOptions {
                 dx12: Dx12BackendOptions {
                     shader_compiler: Dx12Compiler::StaticDxc,

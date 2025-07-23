@@ -83,6 +83,7 @@ fn create_resources() -> (Device, Queue) {
     let instance = Instance::new(&InstanceDescriptor {
         backends: Backends::from_env().unwrap_or_default(),
         flags: InstanceFlags::from_build_config().with_env(),
+        memory_budget_thresholds: Default::default(),
         backend_options: BackendOptions {
             gl: GlBackendOptions::default(),
             dx12: Dx12BackendOptions {
@@ -203,7 +204,7 @@ fn compress(compressor: &mut GpuBlockCompressor, device: &Device, queue: &Queue)
         mapped_at_creation: false,
     });
 
-    let timestamp_readback_buffer = device.create_buffer(&wgpu::BufferDescriptor {
+    let timestamp_readback_buffer = device.create_buffer(&BufferDescriptor {
         label: Some("timestamp read-back buffer"),
         size: 16,
         usage: BufferUsages::COPY_DST | BufferUsages::MAP_READ,
@@ -257,7 +258,7 @@ fn compress(compressor: &mut GpuBlockCompressor, device: &Device, queue: &Queue)
                 let end_ns = timestamps[1] as f64 * period;
                 let duration_ms = (end_ns - start_ns) / 1_000_000.0;
 
-                println!("Compression took: {:.3} ms", duration_ms);
+                println!("Compression took: {duration_ms:.3} ms");
             }
             _ => panic!("couldn't read from buffer"),
         }
