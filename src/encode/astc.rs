@@ -1156,6 +1156,7 @@ impl<'a> BlockCompressorASTC<'a> {
         scaled_pixels
     }
 
+    // Original: astc_encode_ispc()
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn compress(
         &self,
