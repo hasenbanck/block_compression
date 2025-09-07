@@ -1,5 +1,7 @@
 //! CPU based encoding.
 
+#[cfg(feature = "astc")]
+mod astc;
 #[cfg(feature = "bc15")]
 mod bc1_to_5;
 #[cfg(feature = "bc6h")]
@@ -9,17 +11,21 @@ mod bc7;
 #[cfg(any(feature = "bc6h", feature = "bc7"))]
 mod common;
 
+#[cfg(feature = "astc")]
+use self::astc::{BlockCompressorASTC, ModeRankerASTC, ASTC_MAX_RANKED_MODES};
 #[cfg(feature = "bc15")]
 use self::bc1_to_5::BlockCompressorBC15;
 #[cfg(feature = "bc6h")]
 use self::bc6h::BlockCompressorBC6H;
 #[cfg(feature = "bc7")]
 use self::bc7::BlockCompressorBC7;
+#[cfg(feature = "astc")]
+use crate::ASTCSettings;
 #[cfg(feature = "bc6h")]
 use crate::BC6HSettings;
 #[cfg(feature = "bc7")]
 use crate::BC7Settings;
-#[cfg(any(feature = "bc15", feature = "bc6h", feature = "bc7"))]
+#[cfg(any(feature = "astc", feature = "bc15", feature = "bc6h", feature = "bc7"))]
 use crate::CompressionVariant;
 
 /// Compresses raw RGBA8 data into using a texture block compression format.
@@ -105,6 +111,15 @@ pub fn compress_rgba8(
     let block_height = (height as usize).div_ceil(4);
 
     match variation {
+        #[cfg(feature = "astc")]
+        CompressionVariant::ASTC(settings) => compress_astc(
+            rgba_data,
+            blocks_buffer,
+            block_width,
+            block_height,
+            stride,
+            &settings,
+        ),
         #[cfg(feature = "bc15")]
         CompressionVariant::BC1 => {
             compress_bc1(rgba_data, blocks_buffer, block_width, block_height, stride);
@@ -246,6 +261,46 @@ pub fn compress_rgba16(
         #[allow(unreachable_patterns)]
         _ => {
             panic!("only BC6H is supported for calling compress_rgba16");
+        }
+    }
+}
+
+#[cfg(feature = "astc")]
+pub fn compress_astc(
+    rgba_data: &[u8],
+    blocks_buffer: &mut [u8],
+    block_width: usize,
+    block_height: usize,
+    stride: usize,
+    settings: &ASTCSettings,
+) {
+    assert!(
+        settings.block_height <= 8 && settings.block_width <= 8,
+        "maximal supported block size is 8"
+    );
+
+    let mut ranked_modes = [0u32; ASTC_MAX_RANKED_MODES as usize];
+
+    for yy in 0..block_height {
+        for xx in 0..block_width {
+            let mode_ranker = ModeRankerASTC::new(settings);
+            mode_ranker.rank(rgba_data, xx, yy, &mut ranked_modes);
+
+            let mut best_score = f32::INFINITY;
+
+            for i in 0..settings.fast_skip_threshold as usize {
+                let mode = ranked_modes[i];
+
+                let block_compressor = BlockCompressorASTC::new(mode, settings);
+                block_compressor.compress(
+                    rgba_data,
+                    blocks_buffer,
+                    xx,
+                    yy,
+                    stride,
+                    &mut best_score,
+                );
+            }
         }
     }
 }
