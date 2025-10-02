@@ -1,4 +1,9 @@
-use std::{fs::File, path::PathBuf, time::Instant};
+use std::{
+    fs::File,
+    path::PathBuf,
+    sync::Arc,
+    time::{Duration, Instant},
+};
 
 use block_compression::{
     half::f16, BC6HSettings, BC7Settings, CompressionVariant, GpuBlockCompressor,
@@ -9,12 +14,13 @@ use image::ImageReader;
 use pollster::block_on;
 use wgpu::{
     util::{DeviceExt, TextureDataOrder},
+    wgt::{Dx12SwapchainKind, Dx12UseFrameLatencyWaitableObject},
     BackendOptions, Backends, Buffer, BufferDescriptor, BufferUsages, CommandEncoderDescriptor,
     ComputePassDescriptor, ComputePassTimestampWrites, Device, DeviceDescriptor,
-    Dx12BackendOptions, Dx12Compiler, Error, Extent3d, Features, GlBackendOptions, Instance,
-    InstanceDescriptor, InstanceFlags, MapMode, MemoryHints, NoopBackendOptions, PollType,
-    PowerPreference, QueryType, Queue, Texture, TextureDescriptor, TextureDimension, TextureFormat,
-    TextureUsages, TextureViewDescriptor, Trace,
+    Dx12BackendOptions, Dx12Compiler, Error, ExperimentalFeatures, Extent3d, Features,
+    GlBackendOptions, Instance, InstanceDescriptor, InstanceFlags, MapMode, MemoryHints,
+    NoopBackendOptions, PollType, PowerPreference, QueryType, Queue, Texture, TextureDescriptor,
+    TextureDimension, TextureFormat, TextureUsages, TextureViewDescriptor, Trace,
 };
 
 fn main() {
@@ -88,6 +94,8 @@ fn create_resources() -> (Device, Queue) {
             gl: GlBackendOptions::default(),
             dx12: Dx12BackendOptions {
                 shader_compiler: Dx12Compiler::StaticDxc,
+                presentation_system: Dx12SwapchainKind::DxgiFromHwnd,
+                latency_waitable_object: Dx12UseFrameLatencyWaitableObject::Wait,
             }
             .with_env(),
             noop: NoopBackendOptions::default(),
@@ -105,11 +113,12 @@ fn create_resources() -> (Device, Queue) {
         label: Some("main device"),
         required_features: Features::TIMESTAMP_QUERY,
         required_limits: adapter.limits(),
+        experimental_features: ExperimentalFeatures::disabled(),
         memory_hints: MemoryHints::MemoryUsage,
         trace: Trace::Off,
     }))
     .expect("Failed to create device");
-    device.on_uncaptured_error(Box::new(error_handler));
+    device.on_uncaptured_error(Arc::new(error_handler));
 
     let info = adapter.get_info();
     println!("Using backend: {:?}", info.backend);
@@ -246,7 +255,10 @@ fn compress(compressor: &mut GpuBlockCompressor, device: &Device, queue: &Queue)
         let (tx, rx) = std::sync::mpsc::channel();
         buffer_slice.map_async(MapMode::Read, move |v| tx.send(v).unwrap());
 
-        let _ = device.poll(PollType::Wait);
+        let _ = device.poll(PollType::Wait {
+            submission_index: None,
+            timeout: Some(Duration::from_secs(60)),
+        });
 
         match rx.recv() {
             Ok(Ok(())) => {
@@ -293,7 +305,10 @@ fn download_blocks_data(device: &Device, queue: &Queue, block_buffer: Buffer) ->
         let (tx, rx) = std::sync::mpsc::channel();
         buffer_slice.map_async(MapMode::Read, move |v| tx.send(v).unwrap());
 
-        let _ = device.poll(PollType::Wait);
+        let _ = device.poll(PollType::Wait {
+            submission_index: None,
+            timeout: Some(Duration::from_secs(60)),
+        });
 
         match rx.recv() {
             Ok(Ok(())) => {

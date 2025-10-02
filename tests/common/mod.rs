@@ -1,4 +1,7 @@
-use std::sync::LazyLock;
+use std::{
+    sync::{Arc, LazyLock},
+    time::Duration,
+};
 
 use block_compression::CompressionVariant;
 use half::f16;
@@ -6,10 +9,11 @@ use image::ImageReader;
 use pollster::block_on;
 use wgpu::{
     util::{DeviceExt, TextureDataOrder},
+    wgt::{Dx12SwapchainKind, Dx12UseFrameLatencyWaitableObject},
     BackendOptions, Backends, Buffer, BufferDescriptor, BufferUsages, CommandEncoderDescriptor,
-    Device, DeviceDescriptor, Dx12BackendOptions, Dx12Compiler, Error, Extent3d, Features,
-    Instance, InstanceDescriptor, InstanceFlags, Limits, MapMode, MemoryHints, PollType,
-    PowerPreference, Queue, Texture, TextureDescriptor, TextureDimension, TextureFormat,
+    Device, DeviceDescriptor, Dx12BackendOptions, Dx12Compiler, Error, ExperimentalFeatures,
+    Extent3d, Features, Instance, InstanceDescriptor, InstanceFlags, Limits, MapMode, MemoryHints,
+    PollType, PowerPreference, Queue, Texture, TextureDescriptor, TextureDimension, TextureFormat,
     TextureUsages, Trace,
 };
 
@@ -35,6 +39,8 @@ pub fn create_wgpu_resources() -> (Device, Queue) {
             backend_options: BackendOptions {
                 dx12: Dx12BackendOptions {
                     shader_compiler: Dx12Compiler::StaticDxc,
+                    presentation_system: Dx12SwapchainKind::DxgiFromHwnd,
+                    latency_waitable_object: Dx12UseFrameLatencyWaitableObject::Wait,
                 }
                 .with_env(),
                 ..Default::default()
@@ -52,11 +58,12 @@ pub fn create_wgpu_resources() -> (Device, Queue) {
             label: Some("main device"),
             required_features: Features::default(),
             required_limits: Limits::default(),
+            experimental_features: ExperimentalFeatures::disabled(),
             memory_hints: MemoryHints::Performance,
             trace: Trace::Off,
         }))
         .expect("Failed to create device");
-        device.on_uncaptured_error(Box::new(error_handler));
+        device.on_uncaptured_error(Arc::new(error_handler));
 
         (device, queue)
     });
@@ -180,7 +187,10 @@ pub fn download_blocks_data(device: &Device, queue: &Queue, block_buffer: Buffer
         let (tx, rx) = std::sync::mpsc::channel();
         buffer_slice.map_async(MapMode::Read, move |v| tx.send(v).unwrap());
 
-        let _ = device.poll(PollType::Wait);
+        let _ = device.poll(PollType::Wait {
+            submission_index: None,
+            timeout: Some(Duration::from_secs(60)),
+        });
 
         match rx.recv() {
             Ok(Ok(())) => {
