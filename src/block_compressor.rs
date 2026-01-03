@@ -101,6 +101,7 @@ impl GpuBlockCompressor {
                 let checks = ShaderRuntimeChecks {
                     bounds_checks: true,
                     force_loop_bounding: false,
+                    ray_query_initialization_tracking: false,
                 };
                 device.create_shader_module_trusted(include_wgsl!("shader/bc7.wgsl"), checks)
             }
@@ -291,7 +292,7 @@ impl GpuBlockCompressor {
         let pipeline_layout = device.create_pipeline_layout(&PipelineLayoutDescriptor {
             label: Some(&format!("{name} block compression pipeline layout")),
             bind_group_layouts: &[&bind_group_layout],
-            push_constant_ranges: &[],
+            immediate_size: 0,
         });
 
         let pipeline = device.create_compute_pipeline(&ComputePipelineDescriptor {
