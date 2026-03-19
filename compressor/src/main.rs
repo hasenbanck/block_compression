@@ -18,9 +18,10 @@ use wgpu::{
     BackendOptions, Backends, Buffer, BufferDescriptor, BufferUsages, CommandEncoderDescriptor,
     ComputePassDescriptor, ComputePassTimestampWrites, Device, DeviceDescriptor,
     Dx12BackendOptions, Dx12Compiler, Error, ExperimentalFeatures, Extent3d, Features,
-    GlBackendOptions, Instance, InstanceDescriptor, InstanceFlags, MapMode, MemoryHints,
-    NoopBackendOptions, PollType, PowerPreference, QueryType, Queue, Texture, TextureDescriptor,
-    TextureDimension, TextureFormat, TextureUsages, TextureViewDescriptor, Trace,
+    ForceShaderModelToken, GlBackendOptions, Instance, InstanceDescriptor, InstanceFlags, MapMode,
+    MemoryHints, NoopBackendOptions, PollType, PowerPreference, QueryType, Queue, Texture,
+    TextureDescriptor, TextureDimension, TextureFormat, TextureUsages, TextureViewDescriptor,
+    Trace,
 };
 
 fn main() {
@@ -86,7 +87,7 @@ fn main() {
 }
 
 fn create_resources() -> (Device, Queue) {
-    let instance = Instance::new(&InstanceDescriptor {
+    let instance = Instance::new(InstanceDescriptor {
         backends: Backends::from_env().unwrap_or_default(),
         flags: InstanceFlags::from_build_config().with_env(),
         memory_budget_thresholds: Default::default(),
@@ -96,10 +97,13 @@ fn create_resources() -> (Device, Queue) {
                 shader_compiler: Dx12Compiler::StaticDxc,
                 presentation_system: Dx12SwapchainKind::DxgiFromHwnd,
                 latency_waitable_object: Dx12UseFrameLatencyWaitableObject::Wait,
+                force_shader_model: ForceShaderModelToken::default(),
+                agility_sdk: None,
             }
             .with_env(),
             noop: NoopBackendOptions::default(),
         },
+        display: None,
     });
 
     let adapter = block_on(instance.request_adapter(&wgpu::RequestAdapterOptions {

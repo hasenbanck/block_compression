@@ -12,9 +12,9 @@ use wgpu::{
     wgt::{Dx12SwapchainKind, Dx12UseFrameLatencyWaitableObject},
     BackendOptions, Backends, Buffer, BufferDescriptor, BufferUsages, CommandEncoderDescriptor,
     Device, DeviceDescriptor, Dx12BackendOptions, Dx12Compiler, Error, ExperimentalFeatures,
-    Extent3d, Features, Instance, InstanceDescriptor, InstanceFlags, Limits, MapMode, MemoryHints,
-    PollType, PowerPreference, Queue, Texture, TextureDescriptor, TextureDimension, TextureFormat,
-    TextureUsages, Trace,
+    Extent3d, Features, ForceShaderModelToken, Instance, InstanceDescriptor, InstanceFlags, Limits,
+    MapMode, MemoryHints, PollType, PowerPreference, Queue, Texture, TextureDescriptor,
+    TextureDimension, TextureFormat, TextureUsages, Trace,
 };
 
 #[inline]
@@ -32,7 +32,7 @@ pub const MARBLE_FILE_PATH: &str = "tests/images/marble.png";
 
 pub fn create_wgpu_resources() -> (Device, Queue) {
     static CACHE: LazyLock<(Device, Queue)> = LazyLock::new(|| {
-        let instance = Instance::new(&InstanceDescriptor {
+        let instance = Instance::new(InstanceDescriptor {
             backends: Backends::from_env().unwrap_or_default(),
             flags: InstanceFlags::from_build_config().with_env(),
             memory_budget_thresholds: Default::default(),
@@ -41,10 +41,13 @@ pub fn create_wgpu_resources() -> (Device, Queue) {
                     shader_compiler: Dx12Compiler::StaticDxc,
                     presentation_system: Dx12SwapchainKind::DxgiFromHwnd,
                     latency_waitable_object: Dx12UseFrameLatencyWaitableObject::Wait,
+                    force_shader_model: ForceShaderModelToken::default(),
+                    agility_sdk: None,
                 }
                 .with_env(),
                 ..Default::default()
             },
+            display: None,
         });
 
         let adapter = block_on(instance.request_adapter(&wgpu::RequestAdapterOptions {

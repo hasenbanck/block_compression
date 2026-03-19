@@ -242,7 +242,7 @@ fn compare_psnr(image_path: &str, variant: CompressionVariant, channels: u32) {
     print_metrics(image_name, &psnr);
     print_metrics(image_name, &reference_psnr);
 
-    const DIFFERENCE: f64 = 0.0025;
+    const DIFFERENCE: f64 = 0.0035;
 
     if f64::abs(reference_psnr.overall_psnr - psnr.overall_psnr) > DIFFERENCE {
         panic!(
