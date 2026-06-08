@@ -93,14 +93,14 @@ impl GpuBlockCompressor {
             device.create_shader_module(include_wgsl!("shader/bc1_to_5.wgsl"));
         #[cfg(feature = "bc6h")]
         let shader_module_bc6h = device.create_shader_module(include_wgsl!("shader/bc6h.wgsl"));
-        // The addition of the bounded loop in https://github.com/gfx-rs/wgpu/pull/7080
-        // seems to cause the program to crash with AMD integrated GPU.
+        // Keep wgpu's SPIR-V loop bounding enabled for BC7. Disabling it
+        // can produce incorrect BC7 alpha/basic output on RADV/Navi.
         #[cfg(feature = "bc7")]
         let shader_module_bc7 = {
             unsafe {
                 let checks = ShaderRuntimeChecks {
                     bounds_checks: true,
-                    force_loop_bounding: false,
+                    force_loop_bounding: true,
                     ray_query_initialization_tracking: false,
                     task_shader_dispatch_tracking: false,
                     mesh_shader_primitive_indices_clamp: false,
