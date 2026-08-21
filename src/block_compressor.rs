@@ -104,6 +104,7 @@ impl GpuBlockCompressor {
                     ray_query_initialization_tracking: false,
                     task_shader_dispatch_tracking: false,
                     mesh_shader_primitive_indices_clamp: false,
+                    int_div_checks: true,
                 };
                 device.create_shader_module_trusted(include_wgsl!("shader/bc7.wgsl"), checks)
             }

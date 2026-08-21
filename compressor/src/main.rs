@@ -110,6 +110,7 @@ fn create_resources() -> (Device, Queue) {
         power_preference: PowerPreference::HighPerformance,
         compatible_surface: None,
         force_fallback_adapter: false,
+        apply_limit_buckets: false,
     }))
     .expect("Failed to find an appropriate adapter");
 
@@ -266,7 +267,9 @@ fn compress(compressor: &mut GpuBlockCompressor, device: &Device, queue: &Queue)
 
         match rx.recv() {
             Ok(Ok(())) => {
-                let data = buffer_slice.get_mapped_range();
+                let data = buffer_slice
+                    .get_mapped_range()
+                    .expect("can't map buffer range");
                 let timestamps: &[u64] = cast_slice(&data);
 
                 let period = queue.get_timestamp_period() as f64;
@@ -316,7 +319,10 @@ fn download_blocks_data(device: &Device, queue: &Queue, block_buffer: Buffer) ->
 
         match rx.recv() {
             Ok(Ok(())) => {
-                result = buffer_slice.get_mapped_range().to_vec();
+                result = buffer_slice
+                    .get_mapped_range()
+                    .expect("can't map buffer range")
+                    .to_vec();
             }
             _ => panic!("couldn't read from buffer"),
         }
