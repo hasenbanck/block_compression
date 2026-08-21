@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/)
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.10.0] - 2026-08-21
+
+### Updated
+
+- Target WGPU 30
+
 ## [0.9.1] - 2026-06-09
 
 ### Fix
@@ -39,9 +45,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- `GpuBlockCompressor::new()` takes the WGPU device and queue directly without an Arc wrapped around it. WGPU 25
-  made the main structures clonable, since they are internally reference counted, so it's not needed anymore to wrap
-  them in a smart pointer anymore.
+- `GpuBlockCompressor::new()` takes the WGPU device and queue directly without an Arc wrapped around it. WGPU 25 made
+  the main structures clonable, since they are internally reference counted, so it's not needed anymore to wrap them in
+  a smart pointer anymore.
 
 ### Fixed
 
@@ -58,8 +64,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Updated
 
-- Allow the GPU compressor to use row based offsets into the texture to
-  allow submitting smaller chunks of work.
+- Allow the GPU compressor to use row based offsets into the texture to allow submitting smaller chunks of work.
 
 ## [0.2.1] - 2025-02-17
 
