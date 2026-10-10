@@ -554,7 +554,7 @@ fn block_segment_core(ep: ptr<function, array<f32, 24>>, offset: u32, block: ptr
     var dc: vec4<f32>;
     block_pca_axis(&axis, &dc, block, mask, channels);
 
-    var ext = vec2<f32>(3.40282347e38, -3.40282347e38);
+    var ext = vec2<f32>(3.402823e38, -3.402823e38);
 
     // Find min/max
     var mask_shifted = mask << 1u;
@@ -1069,7 +1069,7 @@ fn bc7_enc_mode01237(state: ptr<function, State>, block: ptr<function, array<f32
     var best_qep: array<i32, 24>;
     var best_qblock: vec2<u32>;
     var best_part_id = -1;
-    var best_err = 3.40282347e38;
+    var best_err = 3.402823e38;
 
     for (var part = 0u; part < part_count; part++) {
         var part_id = part_list[part] & 63;
@@ -1367,7 +1367,7 @@ fn compress_bc7(@builtin(global_invocation_id) global_id: vec3<u32>) {
     load_block_interleaved_rgba(&block, xx, yy);
 
     var state: State;
-    state.best_err = 3.40282347e38;
+    state.best_err = 3.402823e38;
     state.opaque_err = compute_opaque_err(&block);
 
     compress_block_bc7_core(&state, &block);
