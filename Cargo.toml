@@ -21,15 +21,16 @@ exclude = ["tests/images/"]
 maintenance = { status = "actively-developed" }
 
 [features]
-default = ["bc15", "bc6h", "bc7", "wgpu"]
+default = ["bc15", "bc6h", "bc7", "wgpu", "wgpu-defaults"]
 bc15 = []
 bc6h = ["half"]
 bc7 = []
+wgpu-defaults = ["wgpu", "wgpu/default"]
 
 [dependencies]
 bytemuck = { workspace = true, features = ["derive"] }
 half = { workspace = true, optional = true, features = ["bytemuck"] }
-wgpu = { workspace = true, optional = true }
+wgpu = { workspace = true, optional = true, features = ["wgsl"] }
 
 [dev-dependencies]
 image = { workspace = true, features = ["png"] }
@@ -42,7 +43,7 @@ ddsfile = "0.6"
 half = "2"
 image = { version = "0.25", default-features = false }
 pollster = "1"
-wgpu = "30"
+wgpu = { version = "30", default-features = false }
 
 [package.metadata.docs.rs]
 features = ["bc6h", "bc7", "half"]
